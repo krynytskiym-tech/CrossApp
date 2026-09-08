@@ -10,6 +10,7 @@
 ```bash
 dotnet build
 dotnet run --project src/Cli
+```
 
 ## Середовище
 
@@ -21,4 +22,7 @@ dotnet run --project src/Cli
 
 - `linux-x64` publish: 165.2 МБ
 - `win-x64` publish: 160.8 МБ
+
+```
+
 ```

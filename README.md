@@ -7,7 +7,7 @@
 
 ## Запуск
 
-'''besh
+'''bash
 dotnet build
 dotnet run --project src/Cli
 

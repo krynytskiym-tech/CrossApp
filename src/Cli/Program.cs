@@ -1,17 +1,21 @@
-﻿using System.Runtime.InteropServices;
 using System.Text.Json;
+using Core;
+
+var env = EnvironmentInfo.Collect();
 
 var info = new
 {
     App = "CrossApp - практикум з крос-платформного програмування",
-    Student = "Криницький Максим, група ФЕІ-21",
-    OSDescription = RuntimeInformation.OSDescription,
-    OSVersion = Environment.OSVersion.ToString(),
-    ProcessArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
-    DotNetVersion = Environment.Version.ToString(),
-    Runtime = RuntimeInformation.FrameworkDescription,
-    BaseDirectory = AppContext.BaseDirectory,
-    CurrentDirectory = Environment.CurrentDirectory,
+    Student = "Криницький Максим, група ФЕІ-33",
+    env.OsDescription,
+    env.OsVersion,
+    env.ProcessArchitecture,
+    env.DotNetVersion,
+    env.Runtime,
+    env.BaseDirectory,
+    env.CurrentDirectory,
+    env.DetectedRid,
+    env.ReportedRid,
     Domain = "Склад (товари, партії, залишки, переміщення)"
 };
 
@@ -25,13 +29,15 @@ else
     Console.WriteLine(info.App);
     Console.WriteLine($"Студент: {info.Student}");
     Console.WriteLine(new string('-', 52));
-    Console.WriteLine($"ОС (OSDescription)  : {info.OSDescription}");
-    Console.WriteLine($"ОС (Environment)    : {info.OSVersion}");
+    Console.WriteLine($"ОС (OSDescription)  : {info.OsDescription}");
+    Console.WriteLine($"ОС (Environment)    : {info.OsVersion}");
     Console.WriteLine($"Архітектура процесу : {info.ProcessArchitecture}");
     Console.WriteLine($"Версія .NET (CLR)   : {info.DotNetVersion}");
     Console.WriteLine($"Runtime             : {info.Runtime}");
     Console.WriteLine($"Каталог застосунку  : {info.BaseDirectory}");
     Console.WriteLine($"Поточний каталог    : {info.CurrentDirectory}");
+    Console.WriteLine($"RID (визначено)     : {info.DetectedRid}");
+    Console.WriteLine($"RID (від .NET)      : {info.ReportedRid}");
     Console.WriteLine(new string('-', 52));
     Console.WriteLine($"Предметна область: {info.Domain}");
 }

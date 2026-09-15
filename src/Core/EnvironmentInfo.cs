@@ -11,7 +11,8 @@ public sealed record EnvironmentReport(
     string BaseDirectory,
     string CurrentDirectory,
     string DetectedRid,
-    string ReportedRid);
+    string ReportedRid,
+    string BuildNote);
 
 public static class EnvironmentInfo
 {
@@ -24,7 +25,15 @@ public static class EnvironmentInfo
         AppContext.BaseDirectory,
         Environment.CurrentDirectory,
         DetectRid(),
-        RuntimeInformation.RuntimeIdentifier);
+        RuntimeInformation.RuntimeIdentifier,
+        GetBuildNote());
+
+    private static string GetBuildNote() =>
+#if NET10_0_OR_GREATER
+        "збірка під .NET 10.0";
+#else
+        "збірка під .NET 8.0";
+#endif
 
     private static string DetectRid()
     {

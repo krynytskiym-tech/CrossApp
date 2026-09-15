@@ -16,6 +16,7 @@ var info = new
     env.CurrentDirectory,
     env.DetectedRid,
     env.ReportedRid,
+    env.BuildNote,
     Domain = "Склад (товари, партії, залишки, переміщення)"
 };
 
@@ -38,6 +39,7 @@ else
     Console.WriteLine($"Поточний каталог    : {info.CurrentDirectory}");
     Console.WriteLine($"RID (визначено)     : {info.DetectedRid}");
     Console.WriteLine($"RID (від .NET)      : {info.ReportedRid}");
+    Console.WriteLine($"Збірка              : {info.BuildNote}");
     Console.WriteLine(new string('-', 52));
     Console.WriteLine($"Предметна область: {info.Domain}");
 }

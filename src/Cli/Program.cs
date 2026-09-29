@@ -1,45 +1,25 @@
-using System.Text.Json;
-using Core;
+using Core.Dto;
+using Core.Import;
 
-var env = EnvironmentInfo.Collect();
+string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
 
-var info = new
+if (!File.Exists(path))
 {
-    App = "CrossApp - практикум з крос-платформного програмування",
-    Student = "Криницький Максим, група ФЕІ-33",
-    env.OsDescription,
-    env.OsVersion,
-    env.ProcessArchitecture,
-    env.DotNetVersion,
-    env.Runtime,
-    env.BaseDirectory,
-    env.CurrentDirectory,
-    env.DetectedRid,
-    env.ReportedRid,
-    env.BuildNote,
-    Domain = "Склад (товари, партії, залишки, переміщення)"
-};
-
-if (args.Contains("--json"))
-{
-    var options = new JsonSerializerOptions { WriteIndented = true };
-    Console.WriteLine(JsonSerializer.Serialize(info, options));
+    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
+    return 1;
 }
-else
+
+ImportResult<ProductDto> result = ProductCsvImporter.Load(path);
+
+Console.WriteLine($"Завантажено записів: {result.Items.Count}");
+foreach (ProductDto p in result.Items.Take(5))
+    Console.WriteLine($" {p.Id,-6} {p.Sku,-10} {p.Name,-26} {p.Quantity,5} {p.Unit}");
+
+if (result.Errors.Count > 0)
 {
-    Console.WriteLine(info.App);
-    Console.WriteLine($"Студент: {info.Student}");
-    Console.WriteLine(new string('-', 52));
-    Console.WriteLine($"ОС (OSDescription)  : {info.OsDescription}");
-    Console.WriteLine($"ОС (Environment)    : {info.OsVersion}");
-    Console.WriteLine($"Архітектура процесу : {info.ProcessArchitecture}");
-    Console.WriteLine($"Версія .NET (CLR)   : {info.DotNetVersion}");
-    Console.WriteLine($"Runtime             : {info.Runtime}");
-    Console.WriteLine($"Каталог застосунку  : {info.BaseDirectory}");
-    Console.WriteLine($"Поточний каталог    : {info.CurrentDirectory}");
-    Console.WriteLine($"RID (визначено)     : {info.DetectedRid}");
-    Console.WriteLine($"RID (від .NET)      : {info.ReportedRid}");
-    Console.WriteLine($"Збірка              : {info.BuildNote}");
-    Console.WriteLine(new string('-', 52));
-    Console.WriteLine($"Предметна область: {info.Domain}");
+    Console.WriteLine($"Пропущено рядків: {result.Errors.Count}");
+    foreach (string e in result.Errors)
+        Console.WriteLine($" ! {e}");
 }
+
+return 0;

@@ -1,8 +1,0 @@
-  Determining projects to restore...
-  All projects are up-to-date for restore.
-  Core -> /home/yurii/Desktop/KPP/N_1/CrossApp/src/Core/bin/Release/net10.0/Core.dll
-/home/yurii/Desktop/KPP/N_1/CrossApp/src/Cli/Program.cs(25,23): warning IL2026: Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved. [/home/yurii/Desktop/KPP/N_1/CrossApp/src/Cli/Cli.csproj]
-  Cli -> /home/yurii/Desktop/KPP/N_1/CrossApp/src/Cli/bin/Release/net10.0/linux-x64/Cli.dll
-  Optimizing assemblies for size. This process might take a while.
-/home/yurii/Desktop/KPP/N_1/CrossApp/src/Cli/Program.cs(25,5): Trim analysis warning IL2026: Program.<Main>$(String[]): Using member 'System.Text.Json.JsonSerializer.Serialize(!!0, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved. [/home/yurii/Desktop/KPP/N_1/CrossApp/src/Cli/Cli.csproj]
-  Cli -> /home/yurii/Desktop/KPP/N_1/CrossApp/publish/sc_trimmed/

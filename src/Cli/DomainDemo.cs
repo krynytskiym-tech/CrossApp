@@ -59,6 +59,34 @@ public static class DomainDemo
         Console.WriteLine($"Відхилено: {domain.Errors.Count}");
         foreach (string e in domain.Errors)
             Console.WriteLine($" ! {e}");
+        Console.WriteLine();
+
+        Console.WriteLine("=== Сценарій 5: статуси товару (додаткове завдання 3) ===");
+        Product tile = Product.Create("P-020", "SKU-020", "Плитка керамічна", "м2", 10);
+        Console.WriteLine($"Статус: {tile.Status}");
+        TryDo("архівація з Active", () => tile.Archive());
+        tile.Discontinue();
+        Console.WriteLine($"Статус: {tile.Status}");
+        TryDo("прихід у знятий із продажу", () => tile.RegisterArrival(5));
+        TryDo("архівація з ненульовим залишком", () => tile.Archive());
+        tile.Issue(10);
+        tile.Archive();
+        Console.WriteLine($"Статус: {tile.Status}, залишок {tile.Quantity}");
+        TryDo("видача з архівного", () => tile.Issue(1));
+        TryDo("повернення з архіву", () => tile.Reactivate());
+        Console.WriteLine();
+
+        Console.WriteLine("=== Сценарій 6: правило між двома сутностями (додаткове завдання 2) ===");
+        Warehouse wh = Warehouse.Create("W-01", "Головний склад", 200);
+        wh.AddProduct(Product.Create("P-030", "SKU-030", "Цемент", "шт", 120));
+        wh.AddProduct(Product.Create("P-031", "SKU-031", "Пісок", "т", 50));
+        Console.WriteLine($"Склад {wh.Name}: зайнято {wh.TotalQuantity} із {wh.Capacity}, вільно {wh.FreeSpace}");
+        TryDo("прихід понад місткість", () => wh.Receive("sku-030", 50));
+        TryDo("дублікат SKU", () => wh.AddProduct(Product.Create("P-032", "SKU-030", "Цемент 2", "шт", 1)));
+        TryDo("невідомий SKU", () => wh.Issue("SKU-999", 1));
+        wh.Receive("sku-030", 30);
+        Console.WriteLine($"Після приходу: зайнято {wh.TotalQuantity} із {wh.Capacity}, вільно {wh.FreeSpace}");
+        TryDo("товар більший за вільне місце", () => wh.AddProduct(Product.Create("P-033", "SKU-033", "Клей", "кг", 5)));
 
         return 0;
     }

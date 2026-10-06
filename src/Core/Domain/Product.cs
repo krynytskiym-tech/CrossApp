@@ -12,6 +12,7 @@ public sealed class Product
     public string Name { get; }
     public string Unit { get; }
     public int Quantity => _quantity;
+    public ProductStatus Status { get; private set; } = ProductStatus.Active;
 
     // Назовні — лише читання: Add/Clear недоступні, приведення до List неможливе.
     public IReadOnlyList<Movement> Movements => _movements.AsReadOnly();
@@ -49,6 +50,9 @@ public sealed class Product
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(nameof(amount), amount,
                 "Кількість приходу має бути більшою за нуль");
+        if (Status != ProductStatus.Active)
+            throw new InvalidOperationException(
+                $"Не можна оформити прихід: товар {Sku} має статус {Status}");
 
         _quantity += amount;
         _movements.Add(new Movement(MovementKind.Arrival, amount));
@@ -59,6 +63,9 @@ public sealed class Product
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(nameof(amount), amount,
                 "Кількість видачі має бути більшою за нуль");
+        if (Status == ProductStatus.Archived)
+            throw new InvalidOperationException(
+                $"Не можна оформити видачу: товар {Sku} має статус {Status}");
         if (amount > _quantity)
             throw new InvalidOperationException(
                 $"Не можна видати {amount}: залишок {Sku} = {_quantity}");
@@ -67,8 +74,36 @@ public sealed class Product
         _movements.Add(new Movement(MovementKind.Issue, amount));
     }
 
+    public void Discontinue() => ChangeStatus(ProductStatus.Discontinued);
+
+    public void Reactivate() => ChangeStatus(ProductStatus.Active);
+
+    public void Archive() => ChangeStatus(ProductStatus.Archived);
+
+    // Допустимі переходи статусу описані таблицею правил (switch expression).
+    private void ChangeStatus(ProductStatus target)
+    {
+        bool allowed = (Status, target) switch
+        {
+            (ProductStatus.Active, ProductStatus.Discontinued) => true,
+            (ProductStatus.Discontinued, ProductStatus.Active) => true,
+            (ProductStatus.Discontinued, ProductStatus.Archived) => true,
+            _ => false
+        };
+
+        if (!allowed)
+            throw new InvalidOperationException(
+                $"Недопустимий перехід статусу товару {Sku}: {Status} → {target}");
+        if (target == ProductStatus.Archived && _quantity > 0)
+            throw new InvalidOperationException(
+                $"Не можна архівувати {Sku}: залишок {_quantity} {Unit} не нульовий");
+
+        Status = target;
+    }
+
     // Мапінг у формат тижня 3 і назад — знадобиться сховищу тижня 5.
-    // Історія руху в DTO не зберігається: FromDto відновлює товар із поточним залишком.
+    // Історія руху і статус у DTO не зберігаються: FromDto відновлює активний товар
+    // із поточним залишком (формат DTO розширять на тижні 5).
     public ProductDto ToDto() => new(Id, Sku, Name, Unit, Quantity);
 
     public static Product FromDto(ProductDto dto) =>

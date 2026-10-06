@@ -19,7 +19,7 @@ CrossApp/
     │   ├── Core.csproj
     │   ├── EnvironmentInfo.cs
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
-    │   ├── Domain/      # модель з поведінкою: Product, Movement, MovementKind, ProductImportExtensions
+    │   ├── Domain/      # модель з поведінкою: Product, ProductStatus, Warehouse, Movement, MovementKind, ProductImportExtensions
     │   └── Import/      # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
@@ -133,6 +133,12 @@ DTO переносить дані, сутність захищає правил�
 9. `Id` і `Sku` після створення не змінюються (немає `set`).
 10. Історію руху не можна змінити ззовні (`IReadOnlyList`, приведення до `List` неможливе).
 11. `FromDto` не обходить перевірки: пошкоджений DTO дає виняток, а не некоректну сутність.
+12. Статус товару змінюється лише допустимими переходами — `InvalidOperationException` (`ChangeStatus`).
+13. Архівувати можна лише товар із нульовим залишком — `InvalidOperationException` (`Archive`).
+14. Прихід можливий лише для активного товару, видача — для неархівного — `InvalidOperationException`.
+15. Місткість складу більша за нуль; id і назва складу не порожні (`Warehouse.Create`).
+16. Сума залишків на складі не перевищує місткість — `InvalidOperationException` (`Warehouse.AddProduct`, `Receive`).
+17. SKU на складі унікальні; невідомий SKU — `InvalidOperationException` (`Warehouse`).
 
 Перевірки виконуються до зміни стану, тому після відмови об'єкт залишається таким, як був.
 Core/Domain не залежить від `Console`, `File` і Cli.
@@ -141,3 +147,16 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 
 `ProductImportExtensions.ToDomain(ImportResult<ProductDto>)` повертає `ImportResult<Product>`:
 сутності, що пройшли інваріанти, плюс помилки розбору файлу та доменні помилки.
+
+### Додаткові завдання 2 і 3
+
+**Статуси (завдання 3).** `ProductStatus`: `Active`, `Discontinued`, `Archived`. Допустимі переходи
+задано таблицею правил у `switch` expression (`Product.ChangeStatus`):
+`Active → Discontinued`, `Discontinued → Active`, `Discontinued → Archived` (лише при нульовому залишку).
+`Archived` — кінцевий стан. Статус у DTO поки не зберігається, `FromDto` повертає `Active`.
+
+**Правило між двома сутностями (завдання 2).** «Сума залишків усіх товарів не перевищує місткість складу»
+охоплює `Warehouse` і кілька `Product`. Сам `Product` склад не знає, тому гарантувати правило не може;
+його перевіряє корінь агрегату `Warehouse` (`AddProduct`, `Receive`). Обмеження: `Product.RegisterArrival`
+лишається публічним, і виклик його напряму обходить перевірку місткості. Тому такі правила зазвичай виносять
+у сервіс (CatalogService, тиждень 5), який працює зі сховищем і викликає операції лише через склад.

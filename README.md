@@ -18,11 +18,14 @@ CrossApp/
     ├── Core/            # class library, без точки входу
     │   ├── Core.csproj
     │   ├── EnvironmentInfo.cs
-    │   ├── Dto/         # ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
+    │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
+    │   ├── Domain/      # модель з поведінкою: Product, Movement, MovementKind, ProductImportExtensions
     │   └── Import/      # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
-        └── Program.cs   # аргументи, вибір імпортера за розширенням, вивід
+        ├── Program.cs   # без аргументів — демонстрація домену, зі шляхом — імпорт
+        ├── DomainDemo.cs    # сценарії лабораторної 4
+        └── ImportCommand.cs # імпорт CSV/JSON/TXT (лабораторна 3)
 ```
 
 Напрямок залежності: `Cli → Core` (односторонній, без циклів).
@@ -31,14 +34,14 @@ CrossApp/
 
 ```
 dotnet build
-dotnet run --project src/Cli
-dotnet run --project src/Cli                        # data/sample.csv
+dotnet run --project src/Cli                        # демонстрація доменної моделі (лаба 4)
+dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
 dotnet run --project src/Cli -- data/sample.json    # JSON-імпортер
 dotnet run --project src/Cli -- data/mixed.txt      # різнорідні рядки P/W
 dotnet run --project src/Cli -- nonexistent.csv     # код виходу 1
 ```
 
-Код виходу: `0` — успіх (навіть якщо частину рядків пропущено), `1` — файл не знайдено,
+Код виходу (режим імпорту): `0` — успіх (навіть якщо частину рядків пропущено), `1` — файл не знайдено,
 `2` — непідтримуване розширення.
 
 ## Середовище
@@ -106,3 +109,35 @@ dotnet publish src/Cli -c Release -r linux-x64 --self-contained false -o publish
 1. **JSON-імпортер** на тих самих типах (`System.Text.Json`), вибір імпортера за розширенням.
 2. **Різнорідні рядки за префіксом**: один `switch` повертає або товар, або склад, або помилку.
 3. **Статистика імпорту** одним рядком: `Статистика: усього 13, прийнято 10, пропущено 3 (23.1% помилок)`.
+
+## Доменна модель (лабораторна 4)
+
+`Product` (Core/Domain) — сутність із поведінкою. `ProductDto` (Core/Dto) лишився форматом даних:
+DTO переносить дані, сутність захищає правила. Зв'язок — `Product.ToDto()` і `Product.FromDto(dto)`;
+`FromDto` проходить через `Create`, тобто через ті самі перевірки.
+
+Стан інкапсульовано: конструктор приватний, створення тільки через `Product.Create`,
+`Id`/`Sku`/`Name`/`Unit` доступні лише для читання, залишок змінюють тільки `RegisterArrival` і `Issue`.
+Історія руху `Movements` назовні — `IReadOnlyList<Movement>` (`AsReadOnly()`).
+
+### Інваріанти
+
+1. Ідентифікатор не порожній — `ArgumentException` (`Create`).
+2. SKU не порожній — `ArgumentException` (`Create`); значення нормалізується (`Trim`, верхній регістр).
+3. Назва не порожня — `ArgumentException` (`Create`).
+4. Одиниця виміру не порожня — `ArgumentException` (`Create`).
+5. Початковий залишок не від'ємний — `ArgumentOutOfRangeException` (`Create`).
+6. Кількість приходу більша за нуль — `ArgumentOutOfRangeException` (`RegisterArrival`).
+7. Кількість видачі більша за нуль — `ArgumentOutOfRangeException` (`Issue`).
+8. Видати можна не більше за залишок — `InvalidOperationException` (`Issue`).
+9. `Id` і `Sku` після створення не змінюються (немає `set`).
+10. Історію руху не можна змінити ззовні (`IReadOnlyList`, приведення до `List` неможливе).
+11. `FromDto` не обходить перевірки: пошкоджений DTO дає виняток, а не некоректну сутність.
+
+Перевірки виконуються до зміни стану, тому після відмови об'єкт залишається таким, як був.
+Core/Domain не залежить від `Console`, `File` і Cli.
+
+### Додаткове завдання 1
+
+`ProductImportExtensions.ToDomain(ImportResult<ProductDto>)` повертає `ImportResult<Product>`:
+сутності, що пройшли інваріанти, плюс помилки розбору файлу та доменні помилки.

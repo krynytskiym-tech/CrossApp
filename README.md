@@ -19,11 +19,16 @@ CrossApp/
     │   ├── Core.csproj
     │   ├── EnvironmentInfo.cs
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
+    │   ├── Abstractions/ # ICatalogStore — контракт сховища
+    │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore
+    │   ├── Services/    # CatalogService — бізнес-операції
+    │   ├── SampleData.cs # 15 записів для демо
     │   ├── Domain/      # модель з поведінкою: Product, ProductStatus, Warehouse, Movement, MovementKind, ProductImportExtensions
     │   └── Import/      # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
-        ├── Program.cs   # без аргументів — демонстрація домену, зі шляхом — імпорт
+        ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
+        ├── CatalogDemo.cs   # сценарії лабораторної 5 (працює лише з інтерфейсом і сервісом)
         ├── DomainDemo.cs    # сценарії лабораторної 4
         └── ImportCommand.cs # імпорт CSV/JSON/TXT (лабораторна 3)
 ```
@@ -34,7 +39,9 @@ CrossApp/
 
 ```
 dotnet build
-dotnet run --project src/Cli                        # демонстрація доменної моделі (лаба 4)
+dotnet run --project src/Cli                        # сервіс + сховище в пам'яті (лаба 5)
+dotnet run --project src/Cli -- --file              # сервіс + файлове сховище (лаба 5)
+dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
 dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
 dotnet run --project src/Cli -- data/sample.json    # JSON-імпортер
 dotnet run --project src/Cli -- data/mixed.txt      # різнорідні рядки P/W
@@ -160,3 +167,32 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 його перевіряє корінь агрегату `Warehouse` (`AddProduct`, `Receive`). Обмеження: `Product.RegisterArrival`
 лишається публічним, і виклик його напряму обходить перевірку місткості. Тому такі правила зазвичай виносять
 у сервіс (CatalogService, тиждень 5), який працює зі сховищем і викликає операції лише через склад.
+
+## Сервісний шар (лабораторна 5)
+
+| Роль | Тип | Розташування |
+| ---- | --- | ------------ |
+| Контракт сховища | `ICatalogStore` | `Core/Abstractions` |
+| Реалізація в пам'яті | `InMemoryCatalogStore` | `Core/Storage` |
+| Файлова реалізація | `FileCatalogStore` | `Core/Storage` |
+| Сервіс | `CatalogService` | `Core/Services` |
+| Composition root | `Program.cs` | `Cli` |
+
+Залежності: `Cli → CatalogService → ICatalogStore ← InMemoryCatalogStore | FileCatalogStore`.
+Сервіс отримує сховище через конструктор і не знає, яка саме реалізація стоїть за інтерфейсом;
+конкретні класи створюються тільки в `Program.cs` (ручний DI, без `Microsoft.Extensions.DependencyInjection`).
+
+Методи інтерфейсу: `List`, `GetById` (повертає `Product?`), `Add`, `Update`, `Remove`.
+Операції сервісу: `Add`, `Receive` (прихід), `Issue` (видача), `All`, `Find`.
+
+### Режими запуску
+
+- Без аргументів: `InMemoryCatalogStore` із 15 записами `SampleData`; після виходу дані зникають.
+- `--file`: `FileCatalogStore`, файл `data/catalog.json` створюється поруч із виконуваним файлом
+  (`AppContext.BaseDirectory`, повний шлях виводиться в консоль); повторний запуск бачить попередні записи.
+
+Формат файлу: JSON-масив `ProductDto` (відступи вмикнено), кирилиця екранується штатно (`System.Text.Json`).
+У файл потрапляють DTO, а не сутності: `ToDto` при записі і `Product.FromDto` (з усіма інваріантами) при читанні.
+Історія руху та статус товару у DTO поки не зберігаються.
+
+Унікальність `id` перевіряє сховище (`InvalidOperationException`), решту інваріантів — сутність `Product`.

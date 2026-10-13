@@ -4,10 +4,12 @@ using Core.Abstractions;
 using Core.Services;
 using Core.Storage;
 
-// dotnet run --project src/Cli                     — сервіс + сховище в пам'яті (лаба 5)
-// dotnet run --project src/Cli -- --file           — сервіс + файлове сховище (лаба 5)
-// dotnet run --project src/Cli -- --domain         — демонстрація доменної моделі (лаба 4)
-// dotnet run --project src/Cli -- data/sample.csv  — імпорт CSV/JSON/TXT (лаба 3)
+// dotnet run --project src/Cli                         — сервіс + сховище в пам'яті (лаба 5)
+// dotnet run --project src/Cli -- --file               — сервіс + файлове сховище (лаба 5)
+// dotnet run --project src/Cli -- --cache              — те саме, обгорнуте в CachingCatalogStore (додаткове 1)
+// dotnet run --project src/Cli -- --factory            — вибір сховища через StoreFactory (додаткове 3)
+// dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
+// dotnet run --project src/Cli -- data/sample.csv      — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
     return DomainDemo.Run();
 
@@ -18,9 +20,20 @@ if (args.Length > 0 && !args[0].StartsWith("--"))
 bool useFile = args.Contains("--file");
 string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-ICatalogStore store = useFile
-    ? new FileCatalogStore(dataPath)
-    : new InMemoryCatalogStore(SampleData.Products());
+ICatalogStore store;
+if (args.Contains("--factory"))
+{
+    store = StoreFactory.Create(args, dataPath);
+}
+else
+{
+    store = useFile
+        ? new FileCatalogStore(dataPath)
+        : new InMemoryCatalogStore(SampleData.Products());
+
+    if (args.Contains("--cache"))
+        store = new CachingCatalogStore(store);
+}
 
 var service = new CatalogService(store);
 // -----------------------------------------------------------------------
@@ -28,4 +41,13 @@ var service = new CatalogService(store);
 if (useFile)
     Console.WriteLine($"Файл даних: {dataPath}");
 
-return CatalogDemo.Run(store.GetType().Name, store, service);
+string storeName = store is CachingCatalogStore caching
+    ? $"{nameof(CachingCatalogStore)} → {caching.InnerName}"
+    : store.GetType().Name;
+
+int code = CatalogDemo.Run(storeName, store, service);
+
+if (store is CachingCatalogStore stats)
+    Console.WriteLine($"Кеш: влучань {stats.Hits}, промахів {stats.Misses}");
+
+return code;

@@ -34,6 +34,7 @@ public sealed class Warehouse
         return new Warehouse(id.Trim(), name.Trim(), capacity);
     }
 
+    //2
     public void AddProduct(Product product)
     {
         if (product is null)

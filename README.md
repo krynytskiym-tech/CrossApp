@@ -20,7 +20,7 @@ CrossApp/
     │   ├── EnvironmentInfo.cs
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
     │   ├── Abstractions/ # ICatalogStore — контракт сховища
-    │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore
+    │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore, CachingCatalogStore
     │   ├── Services/    # CatalogService — бізнес-операції
     │   ├── SampleData.cs # 15 записів для демо
     │   ├── Domain/      # модель з поведінкою: Product, ProductStatus, Warehouse, Movement, MovementKind, ProductImportExtensions
@@ -28,6 +28,7 @@ CrossApp/
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
         ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
+        ├── StoreFactory.cs  # альтернативний вибір сховища (додаткове 3)
         ├── CatalogDemo.cs   # сценарії лабораторної 5 (працює лише з інтерфейсом і сервісом)
         ├── DomainDemo.cs    # сценарії лабораторної 4
         └── ImportCommand.cs # імпорт CSV/JSON/TXT (лабораторна 3)
@@ -41,6 +42,8 @@ CrossApp/
 dotnet build
 dotnet run --project src/Cli                        # сервіс + сховище в пам'яті (лаба 5)
 dotnet run --project src/Cli -- --file              # сервіс + файлове сховище (лаба 5)
+dotnet run --project src/Cli -- --cache             # + декоратор CachingCatalogStore
+dotnet run --project src/Cli -- --file --cache --factory   # сховище збирає StoreFactory
 dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
 dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
 dotnet run --project src/Cli -- data/sample.json    # JSON-імпортер
@@ -183,7 +186,7 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 конкретні класи створюються тільки в `Program.cs` (ручний DI, без `Microsoft.Extensions.DependencyInjection`).
 
 Методи інтерфейсу: `List`, `GetById` (повертає `Product?`), `Add`, `Update`, `Remove`.
-Операції сервісу: `Add`, `Receive` (прихід), `Issue` (видача), `All`, `Find`.
+Операції сервісу: `Add`, `Receive` (прихід), `Issue` (видача), `All`, `Find`, `Search(Func<Product, bool>)`.
 
 ### Режими запуску
 
@@ -196,3 +199,15 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 Історія руху та статус товару у DTO поки не зберігаються.
 
 Унікальність `id` перевіряє сховище (`InvalidOperationException`), решту інваріантів — сутність `Product`.
+
+### Додаткові завдання лабораторної 5
+
+1. **Декоратор `CachingCatalogStore`** (`Core/Storage`): приймає інший `ICatalogStore` у конструкторі, має той самий
+   контракт і кешує `List` та `GetById`; `Add`/`Update`/`Remove` скидають кеш. Лічильники `Hits`/`Misses`
+   виводяться наприкінці запуску з `--cache`.
+2. **Пошук `Search(Func<Product, bool>)`** у `CatalogService`: умову передає викликач, сервіс фільтрує `List()`
+   (підготовка до LINQ-звітів тижнів 6–7).
+3. **`StoreFactory.Create(args, dataPath)`** (`Cli`): те саме складання сховища, що й у `Program.cs`, але в окремому
+   класі; вмикається прапорцем `--factory`. Плюс фабрики — `Program.cs` лишається короткою при зростанні кількості
+   реалізацій; мінус — додатковий рівень непрямості для двох сховищ. Фабрика лежить у `Cli`, тож `Core`
+   по-давньому не знає конкретних реалізацій.

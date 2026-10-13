@@ -80,7 +80,8 @@ public sealed class Product
 
     public void Archive() => ChangeStatus(ProductStatus.Archived);
 
-    // Допустимі переходи статусу описані таблицею правил (switch expression).
+    // Допустимі переходи статусу описані таблицею правил (switch expression). 
+    //3
     private void ChangeStatus(ProductStatus target)
     {
         bool allowed = (Status, target) switch
@@ -101,9 +102,7 @@ public sealed class Product
         Status = target;
     }
 
-    // Мапінг у формат тижня 3 і назад — знадобиться сховищу тижня 5.
     // Історія руху і статус у DTO не зберігаються: FromDto відновлює активний товар
-    // із поточним залишком (формат DTO розширять на тижні 5).
     public ProductDto ToDto() => new(Id, Sku, Name, Unit, Quantity);
 
     public static Product FromDto(ProductDto dto) =>

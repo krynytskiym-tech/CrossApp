@@ -1,4 +1,5 @@
 using Core.Abstractions;
+using Core.Domain;
 using Core.Services;
 
 namespace Cli;
@@ -22,7 +23,7 @@ public static class CatalogDemo
         var all = service.All();
         Console.WriteLine($"Усього записів: {all.Count}");
         foreach (var p in all)
-            Console.WriteLine($" {p.Id} {p.Sku,-10} {p.Name,-22} {p.Quantity,5} {p.Unit}");
+            PrintProduct(p);
         Console.WriteLine();
 
         Console.WriteLine("=== Сценарій 2: відмови ===");
@@ -30,9 +31,26 @@ public static class CatalogDemo
         TryDo("видача більша за залишок", () => service.Issue(created.Id, 1000));
         TryDo("дубль id у сховищі", () => store.Add(created));
         TryDo("порожній SKU", () => service.Add(" ", "Без SKU", "шт", 1));
+        Console.WriteLine();
+
+        Console.WriteLine("=== Сценарій 3: пошук за умовою (Func<Product, bool>) ===");
+        var low = service.Search(p => p.Quantity < 100);
+        Console.WriteLine($"Залишок менший за 100: {low.Count}");
+        foreach (var p in low)
+            PrintProduct(p);
+
+        var tiles = service.Search(p => p.Unit == "м2");
+        Console.WriteLine($"Одиниця «м2»: {tiles.Count}");
+        foreach (var p in tiles)
+            PrintProduct(p);
+
+        Console.WriteLine($"Повторний пошук за id: {service.Find(created.Id)}");
 
         return 0;
     }
+
+    private static void PrintProduct(Product p) =>
+        Console.WriteLine($" {p.Id} {p.Sku,-10} {p.Name,-22} {p.Quantity,5} {p.Unit}");
 
     private static void TryDo(string title, Action action)
     {

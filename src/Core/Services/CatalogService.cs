@@ -32,6 +32,13 @@ public sealed class CatalogService(ICatalogStore store)
 
     public Product? Find(string id) => _store.GetById(id);
 
+    // Пошук за довільною умовою: підготовка до LINQ-звітів тижнів 6-7.
+    public IReadOnlyList<Product> Search(Func<Product, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return _store.List().Where(predicate).ToList();
+    }
+
     private Product Get(string id) =>
         _store.GetById(id) ?? throw new InvalidOperationException($"Немає запису з id={id}.");
 }

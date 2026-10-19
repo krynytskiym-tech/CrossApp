@@ -1,24 +1,29 @@
 using Cli;
+using Cli.Sinks;
 using Core;
 using Core.Abstractions;
+using Core.Events;
 using Core.Services;
 using Core.Storage;
 
-// dotnet run --project src/Cli                         — сервіс + сховище в пам'яті (лаба 5)
-// dotnet run --project src/Cli -- --file               — сервіс + файлове сховище (лаба 5)
-// dotnet run --project src/Cli -- --cache              — те саме, обгорнуте в CachingCatalogStore (додаткове 1)
-// dotnet run --project src/Cli -- --factory            — вибір сховища через StoreFactory (додаткове 3)
+// dotnet run --project src/Cli                         — сервіс + сховище в пам'яті (лаба 5), потім події (лаба 6)
+// dotnet run --project src/Cli -- --file               — файлове сховище
+// dotnet run --project src/Cli -- --cache              — декоратор CachingCatalogStore (лаба 5, додаткове)
+// dotnet run --project src/Cli -- --factory            — вибір сховища через StoreFactory (лаба 5, додаткове)
+// dotnet run --project src/Cli -- --sinks              — сповіщення через INotificationSink замість підписки (лаба 6, додаткове)
 // dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
-// dotnet run --project src/Cli -- data/sample.csv      — імпорт CSV/JSON/TXT (лаба 3)
+// dotnet run --project src/Cli -- data/sample.csv [--verbose]  — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
     return DomainDemo.Run();
 
 if (args.Length > 0 && !args[0].StartsWith("--"))
-    return ImportCommand.Run(args[0]);
+    return ImportCommand.Run(args[0], args.Contains("--verbose"));
 
 // ---- Composition root: єдине місце, де створюються конкретні класи ----
 bool useFile = args.Contains("--file");
+bool useSinks = args.Contains("--sinks");
 string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
+string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
 ICatalogStore store;
 if (args.Contains("--factory"))
@@ -35,7 +40,11 @@ else
         store = new CachingCatalogStore(store);
 }
 
-var service = new CatalogService(store);
+INotificationSink? sink = useSinks
+    ? new CompositeSink(new ConsoleSink(), new FileSink(logPath))
+    : null;
+
+var service = new CatalogService(store, sink);
 // -----------------------------------------------------------------------
 
 if (useFile)
@@ -45,9 +54,30 @@ string storeName = store is CachingCatalogStore caching
     ? $"{nameof(CachingCatalogStore)} → {caching.InnerName}"
     : store.GetType().Name;
 
-int code = CatalogDemo.Run(storeName, store, service);
+// Сценарії лабораторної 5 виконуються до підписки: подій ще ніхто не слухає.
+CatalogDemo.Run(storeName, store, service);
 
 if (store is CachingCatalogStore stats)
     Console.WriteLine($"Кеш: влучань {stats.Hits}, промахів {stats.Misses}");
+Console.WriteLine();
 
-return code;
+// ---- Лабораторна 6: підписка на подію ----
+Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+int changes = 0;
+
+// Локальний метод: його можна передати і в +=, і в -=.
+void OnCatalogChanged(object? sender, CatalogChangedEventArgs e)
+{
+    string line = ChangeFormatter.Format(e);
+    Console.WriteLine(line);
+    File.AppendAllText(logPath, line + Environment.NewLine);
+}
+
+if (!useSinks)                                   // у режимі --sinks виводять приймачі, подвійного рядка не потрібно
+    service.Changed += OnCatalogChanged;         // підписник 1: консоль + файл
+service.Changed += (_, _) => changes++;          // підписник 2: лямбда із замиканням над changes
+
+Console.WriteLine($"Журнал: {logPath}");
+Console.WriteLine();
+
+return EventsDemo.Run(service, OnCatalogChanged, () => changes);

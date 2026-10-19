@@ -1,24 +1,37 @@
 using Core.Abstractions;
 using Core.Domain;
+using Core.Events;
 
 namespace Core.Services;
 
-public sealed class CatalogService(ICatalogStore store)
+public sealed class CatalogService(ICatalogStore store, INotificationSink? sink = null)
 {
     private readonly ICatalogStore _store = store ?? throw new ArgumentNullException(nameof(store));
+
+    public event EventHandler<CatalogChangedEventArgs>? Changed;
+
+    // Єдине місце підняття події. Викликається лише ПІСЛЯ успішної зміни стану.
+    private void OnChanged(Product p, CatalogChangeKind kind, int delta, int? quantityAfter = null)
+    {
+        var args = new CatalogChangedEventArgs(p.Id, kind, delta, quantityAfter ?? p.Quantity);
+        Changed?.Invoke(this, args);
+        sink?.Notify(args);
+    }
 
     public Product Add(string sku, string name, string unit, int quantity)
     {
         var product = Product.Create(Guid.NewGuid().ToString("N")[..8], sku, name, unit, quantity);
         _store.Add(product);   // інваріанти вже перевірив Product.Create
+        OnChanged(product, CatalogChangeKind.Added, quantity);   // після зміни, не до
         return product;
     }
 
     public void Receive(string id, int quantity)
     {
         var product = Get(id);
-        product.RegisterArrival(quantity);   // метод сутності з тижня 4
+        product.RegisterArrival(quantity);   // якщо тут виняток — події не буде
         _store.Update(product);
+        OnChanged(product, CatalogChangeKind.Received, quantity);
     }
 
     public void Issue(string id, int quantity)
@@ -26,14 +39,23 @@ public sealed class CatalogService(ICatalogStore store)
         var product = Get(id);
         product.Issue(quantity);
         _store.Update(product);
+        OnChanged(product, CatalogChangeKind.Issued, -quantity);
+    }
+
+    public void Remove(string id)
+    {
+        var product = Get(id);
+        int before = product.Quantity;
+        _store.Remove(id);
+        OnChanged(product, CatalogChangeKind.Removed, -before, 0);
     }
 
     public IReadOnlyList<Product> All() => _store.List();
 
     public Product? Find(string id) => _store.GetById(id);
 
-    // Пошук за довільною умовою: підготовка до LINQ-звітів тижнів 6-7.
-    public IReadOnlyList<Product> Search(Func<Product, bool> predicate)
+    // Критерій задає той, хто викликає: Func повертає значення, подія для цього не годиться.
+    public IReadOnlyList<Product> FindAll(Func<Product, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
         return _store.List().Where(predicate).ToList();

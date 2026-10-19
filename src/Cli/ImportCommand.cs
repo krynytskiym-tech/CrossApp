@@ -6,7 +6,7 @@ namespace Cli;
 
 public static class ImportCommand
 {
-    public static int Run(string path)
+    public static int Run(string path, bool verbose = false)
     {
         if (!File.Exists(path))
         {
@@ -16,9 +16,14 @@ public static class ImportCommand
 
         string extension = Path.GetExtension(path).ToLowerInvariant();
 
+        // Додаткове завдання 2 (лаба 6): Action<string> для звіту про пропущені рядки в процесі імпорту.
+        Action<string>? onSkipped = verbose
+            ? message => Console.WriteLine($"  [імпорт] пропущено: {message}")
+            : null;
+
         return extension switch
         {
-            ".csv" => ShowProducts(ProductCsvImporter.Load(path), "рядків"),
+            ".csv" => ShowProducts(ProductCsvImporter.Load(path, onSkipped), "рядків"),
             ".json" => ShowProducts(ProductJsonImporter.Load(path), "записів"),
             ".txt" => ShowMixed(MixedCsvImporter.Load(path)),
             _ => ShowUnsupported(extension)
@@ -63,7 +68,7 @@ public static class ImportCommand
     private static void PrintProducts(IReadOnlyList<ProductDto> products)
     {
         foreach (ProductDto p in products.Take(5))
-            Console.WriteLine($" {p.Id,-6} {p.Sku,-10} {p.Name,-26} {p.Quantity,5} {p.Unit}");
+            Console.WriteLine($" {p.Id,-6} {p.Sku,-10} {p.Name,-22} {p.Quantity,5} {p.Unit}");
     }
 
     private static void PrintTail(ImportStats stats, IReadOnlyList<string> errors, string unit)

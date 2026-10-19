@@ -19,7 +19,8 @@ CrossApp/
     │   ├── Core.csproj
     │   ├── EnvironmentInfo.cs
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
-    │   ├── Abstractions/ # ICatalogStore — контракт сховища
+    │   ├── Abstractions/ # ICatalogStore — контракт сховища, INotificationSink — приймач сповіщень
+    │   ├── Events/      # CatalogChangeKind, CatalogChangedEventArgs — дані події сервісу
     │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore, CachingCatalogStore
     │   ├── Services/    # CatalogService — бізнес-операції
     │   ├── SampleData.cs # 15 записів для демо
@@ -28,6 +29,9 @@ CrossApp/
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
         ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
+        ├── EventsDemo.cs    # сценарій подій лабораторної 6
+        ├── ChangeFormatter.cs # формат рядка журналу
+        ├── Sinks/           # ConsoleSink, FileSink, CompositeSink (додаткове завдання 1 лаби 6)
         ├── StoreFactory.cs  # альтернативний вибір сховища (додаткове 3)
         ├── CatalogDemo.cs   # сценарії лабораторної 5 (працює лише з інтерфейсом і сервісом)
         ├── DomainDemo.cs    # сценарії лабораторної 4
@@ -44,8 +48,10 @@ dotnet run --project src/Cli                        # сервіс + схови�
 dotnet run --project src/Cli -- --file              # сервіс + файлове сховище (лаба 5)
 dotnet run --project src/Cli -- --cache             # + декоратор CachingCatalogStore
 dotnet run --project src/Cli -- --file --cache --factory   # сховище збирає StoreFactory
+dotnet run --project src/Cli -- --sinks             # сповіщення через INotificationSink (лаба 6, додаткове)
 dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
 dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
+dotnet run --project src/Cli -- data/sample.csv --verbose   # + Action<string> про пропущені рядки
 dotnet run --project src/Cli -- data/sample.json    # JSON-імпортер
 dotnet run --project src/Cli -- data/mixed.txt      # різнорідні рядки P/W
 dotnet run --project src/Cli -- nonexistent.csv     # код виходу 1
@@ -186,7 +192,7 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 конкретні класи створюються тільки в `Program.cs` (ручний DI, без `Microsoft.Extensions.DependencyInjection`).
 
 Методи інтерфейсу: `List`, `GetById` (повертає `Product?`), `Add`, `Update`, `Remove`.
-Операції сервісу: `Add`, `Receive` (прихід), `Issue` (видача), `All`, `Find`, `Search(Func<Product, bool>)`.
+Операції сервісу: `Add`, `Receive` (прихід), `Issue` (видача), `Remove`, `All`, `Find`, `FindAll(Func<Product, bool>)`; подія `Changed`.
 
 ### Режими запуску
 
@@ -205,9 +211,47 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 1. **Декоратор `CachingCatalogStore`** (`Core/Storage`): приймає інший `ICatalogStore` у конструкторі, має той самий
    контракт і кешує `List` та `GetById`; `Add`/`Update`/`Remove` скидають кеш. Лічильники `Hits`/`Misses`
    виводяться наприкінці запуску з `--cache`.
-2. **Пошук `Search(Func<Product, bool>)`** у `CatalogService`: умову передає викликач, сервіс фільтрує `List()`
+2. **Пошук `FindAll(Func<Product, bool>)`** у `CatalogService` (у лабі 6 метод перейменовано з `Search`): умову передає викликач, сервіс фільтрує `List()`
    (підготовка до LINQ-звітів тижнів 6–7).
 3. **`StoreFactory.Create(args, dataPath)`** (`Cli`): те саме складання сховища, що й у `Program.cs`, але в окремому
    класі; вмикається прапорцем `--factory`. Плюс фабрики — `Program.cs` лишається короткою при зростанні кількості
    реалізацій; мінус — додатковий рівень непрямості для двох сховищ. Фабрика лежить у `Cli`, тож `Core`
    по-давньому не знає конкретних реалізацій.
+
+## Доменні події (лабораторна 6)
+
+`CatalogService` піднімає подію `Changed` (`EventHandler<CatalogChangedEventArgs>`) після кожної **успішної** зміни стану:
+
+| Операція | Вид (`CatalogChangeKind`) | `Delta` |
+| -------- | ------------------------- | ------- |
+| `Add` | `Added` | `+кількість` |
+| `Receive` | `Received` | `+кількість` |
+| `Issue` | `Issued` | `-кількість` |
+| `Remove` | `Removed` | `-залишок` (залишок після = 0) |
+
+Дані події: `Id`, `Kind`, `Delta`, `QuantityAfter`, `At`. Якщо операція кинула виняток (інваріант `Product` або відсутній запис),
+подія не піднімається. `Core` не знає про консоль і файли: логер підписується в `Program.cs`.
+
+Підписники в Cli:
+1. локальний метод `OnCatalogChanged` — виводить рядок у консоль і дописує його в `logs/app.log`
+   (`Path.Combine(AppContext.BaseDirectory, "logs", "app.log")`, каталог створюється кодом);
+2. лямбда `(_, _) => changes++` — лічильник із замиканням над локальною змінною.
+
+`service.Changed -= OnCatalogChanged` знімає логер: операція виконується, рядка в консолі й у журналі немає, лічильник продовжує рахувати.
+Пошук `FindAll(Func<Product, bool>)` повертає значення, тому тут делегат `Func`, а не подія.
+
+### Додаткові завдання лабораторної 6
+
+1. **`INotificationSink`** (`Core/Abstractions`) з реалізаціями `ConsoleSink` і `FileSink` (`Cli/Sinks`) та `CompositeSink`;
+   приймач передається сервісу через конструктор (`--sinks`). Порівняння з подією: приймач — обов'язкова залежність,
+   яку не можна «відписати» під час роботи; подія — необов'язкова, підписники додаються й знімаються динамічно.
+2. **`Action<string>` у `ProductCsvImporter.Load(path, onSkipped)`**: зворотний виклик для кожного пропущеного рядка;
+   у Cli вмикається прапорцем `--verbose` при імпорті.
+3. **Чому async-обробник події — це `async void`**: див. нижче.
+
+#### async void і події
+Тип `EventHandler<T>` повертає `void`, тому асинхронний обробник можна оголосити лише як `async void`. Чекати на завершення
+такого обробника видавець подій не може (немає `Task`), а необроблений виняток у ньому не потрапляє в `try/catch` навколо
+`Changed?.Invoke(...)`: він піднімається в контексті синхронізації й здатен завершити процес. Крім того, видавець іде далі,
+не дочекавшись завершення обробки, тож порядок побічних ефектів стає непередбачуваним. Тому в `async void`-обробнику
+весь код огортають у `try/catch`, а там, де потрібен результат чи очікування, використовують метод із `Task`.

@@ -34,12 +34,12 @@ public static class CatalogDemo
         Console.WriteLine();
 
         Console.WriteLine("=== Сценарій 3: пошук за умовою (Func<Product, bool>) ===");
-        var low = service.Search(p => p.Quantity < 100);
+        var low = service.FindAll(p => p.Quantity < 100);
         Console.WriteLine($"Залишок менший за 100: {low.Count}");
         foreach (var p in low)
             PrintProduct(p);
 
-        var tiles = service.Search(p => p.Unit == "м2");
+        var tiles = service.FindAll(p => p.Unit == "м2");
         Console.WriteLine($"Одиниця «м2»: {tiles.Count}");
         foreach (var p in tiles)
             PrintProduct(p);

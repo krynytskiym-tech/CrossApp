@@ -21,6 +21,7 @@ CrossApp/
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
     │   ├── Abstractions/ # ICatalogStore — контракт сховища, INotificationSink — приймач сповіщень
     │   ├── Events/      # CatalogChangeKind, CatalogChangedEventArgs — дані події сервісу
+    │   ├── Reports/     # ReportService (LINQ-звіти), DTO StockLine, GroupSummary, TopBy, Join-звіти
     │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore, CachingCatalogStore
     │   ├── Services/    # CatalogService — бізнес-операції
     │   ├── SampleData.cs # 15 записів для демо
@@ -30,6 +31,7 @@ CrossApp/
         ├── Cli.csproj   # ProjectReference на Core
         ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
         ├── EventsDemo.cs    # сценарій подій лабораторної 6
+        ├── ReportCommand.cs # підкоманди report-* лабораторної 7
         ├── ChangeFormatter.cs # формат рядка журналу
         ├── Sinks/           # ConsoleSink, FileSink, CompositeSink (додаткове завдання 1 лаби 6)
         ├── StoreFactory.cs  # альтернативний вибір сховища (додаткове 3)
@@ -48,6 +50,7 @@ dotnet run --project src/Cli                        # сервіс + схови�
 dotnet run --project src/Cli -- --file              # сервіс + файлове сховище (лаба 5)
 dotnet run --project src/Cli -- --cache             # + декоратор CachingCatalogStore
 dotnet run --project src/Cli -- --file --cache --factory   # сховище збирає StoreFactory
+dotnet run --project src/Cli -- report-top          # звіти LINQ (лаба 7), див. розділ нижче
 dotnet run --project src/Cli -- --sinks             # сповіщення через INotificationSink (лаба 6, додаткове)
 dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
 dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
@@ -255,3 +258,41 @@ Core/Domain не залежить від `Console`, `File` і Cli.
 `Changed?.Invoke(...)`: він піднімається в контексті синхронізації й здатен завершити процес. Крім того, видавець іде далі,
 не дочекавшись завершення обробки, тож порядок побічних ефектів стає непередбачуваним. Тому в `async void`-обробнику
 весь код огортають у `try/catch`, а там, де потрібен результат чи очікування, використовують метод із `Task`.
+
+## Звіти LINQ (лабораторна 7)
+
+`ReportService` (`Core/Reports`) — чисті функції: приймають `IEnumerable<Product>`, повертають `IReadOnlyList<DTO>`
+(`StockLine`, `GroupSummary`), не знають про сховище, консоль чи файли. `Program.cs` містить лише виклики й вивід,
+жодного `Where` чи `GroupBy`.
+
+| Підкоманда | Метод | Питання | Оператори |
+| ---------- | ----- | ------- | --------- |
+| `report-top` | `TopByQuantity` | 5 позицій із найбільшим залишком | `OrderByDescending`, `ThenBy`, `Take`, `Select` (через `TopBy`) |
+| `report-low` | `LowStock` | Які позиції менші за поріг (< 10) | `Where`, `OrderBy`, `ThenBy`, `Select` |
+| `report-groups` | `ByUnit` | Розподіл за одиницею виміру | `GroupBy`, `Count`, `Sum`, `OrderByDescending` |
+| `report-sum` | `Totals` | Кількість, сума, середнє, максимум | `Count`, `Sum`, `Average`, `Max`, кортеж |
+| `report-defer` | — | Демонстрація відкладеного виконання | `Where`, `Count()`, `ToList()` |
+
+Порожнє джерело: `Totals` повертає нулі (перевірка `Count == 0` до `Average`/`Max`), решта методів повертає порожній список.
+Топ-N має другий ключ `Sku` (`ThenBy`, `StringComparer.Ordinal`), тому порядок однаковий при кожному запуску.
+
+### Відкладене виконання: коли виконується запит
+
+`source.Where(...)` лише описує запит: у момент оголошення нічого не обробляється. Фактична робота починається при переборі
+(`Count()`, `foreach`, `ToList()`). Тому в демо `report-defer` перший `query.Count()` дає 3 (дефіцитних позицій було три), а після
+`source.Add(...)` другий виклик того самого `query.Count()` дає 4: запит виконується заново по зміненому джерелу.
+`snapshot = query.ToList()` фіксує результат: після `source.Clear()` у знімку лишається 4, а сам запит уже повертає 0.
+Звідси правило: якщо результат потрібен кілька разів або джерело може змінитися, матеріалізуйте його один раз через `ToList()`.
+
+### Додаткові завдання лабораторної 7
+
+1. **Join / GroupJoin** (`report-movements`, `report-activity`): друга колекція — журнал `JournalEntry`, який збирає підписник
+   на подію `Changed` (лаба 6). `Join` додає до кожного запису журналу дані товару, `GroupJoin` показує й товари без руху.
+2. **Метод-розширення `TopBy`** (`Core/Reports/EnumerableExtensions.cs`): `OrderByDescending` + `ThenBy` + `Take`;
+   використано у двох звітах: `TopByQuantity` (`report-top`) і `TopUnits` (`report-top-units`).
+3. **Синтаксис запитів** (`report-groups-query`): `from ... group ... into g ... select`. Результат той самий, що й у
+   методному варіанті; відмінність — `group by` не приймає компаратор, тому ключ нормалізовано `ToLowerInvariant()`.
+   Для групування читабельніший синтаксис запитів (ключ, `into`, `orderby`, `select` йдуть зверху вниз), для `Where`/`Take`/`ThenBy`
+   — ланцюжок методів.
+4. **Stopwatch на 100 000 записів** (`report-bench`): порівнюється запит, що перебирається тричі (`Count`, `Sum`, `Max`),
+   з варіантом, де результат один раз матеріалізовано `ToList()`; обидва варіанти мають дати однакові значення.

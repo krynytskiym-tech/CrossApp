@@ -20,6 +20,9 @@ public static class SampleData
         Product.Create("P-012", "SKU-012", "Стрічка армуюча", "м", 400),
         Product.Create("P-013", "SKU-013", "Утеплювач 50мм", "м2", 220),
         Product.Create("P-014", "SKU-014", "Ламінат 8мм", "м2", 150),
-        Product.Create("P-015", "SKU-015", "Двері міжкімнатні", "шт", 12)
+        Product.Create("P-015", "SKU-015", "Двері міжкімнатні", "шт", 12),
+        Product.Create("P-016", "SKU-016", "Скоба будівельна", "шт", 8),
+        Product.Create("P-017", "SKU-017", "Дюбель-цвях", "уп", 5),
+        Product.Create("P-018", "SKU-018", "Шланг гумовий", "м", 6)
     ];
 }

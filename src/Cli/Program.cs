@@ -3,21 +3,25 @@ using Cli.Sinks;
 using Core;
 using Core.Abstractions;
 using Core.Events;
+using Core.Reports;
 using Core.Services;
 using Core.Storage;
 
 // dotnet run --project src/Cli                         — сервіс + сховище в пам'яті (лаба 5), потім події (лаба 6)
 // dotnet run --project src/Cli -- --file               — файлове сховище
-// dotnet run --project src/Cli -- --cache              — декоратор CachingCatalogStore (лаба 5, додаткове)
-// dotnet run --project src/Cli -- --factory            — вибір сховища через StoreFactory (лаба 5, додаткове)
-// dotnet run --project src/Cli -- --sinks              — сповіщення через INotificationSink замість підписки (лаба 6, додаткове)
+// dotnet run --project src/Cli -- report-top           — звіти LINQ (лаба 7): report-top | report-low | report-groups | report-sum | ...
+// dotnet run --project src/Cli -- --cache | --factory | --sinks   — додаткові режими лаб 5 і 6
 // dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
 // dotnet run --project src/Cli -- data/sample.csv [--verbose]  — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
     return DomainDemo.Run();
 
-if (args.Length > 0 && !args[0].StartsWith("--"))
-    return ImportCommand.Run(args[0], args.Contains("--verbose"));
+// Перший аргумент без "--": підкоманда звіту або шлях до файлу для імпорту.
+string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
+bool isReport = command is not null && command.StartsWith("report-");
+
+if (command is not null && !isReport)
+    return ImportCommand.Run(command, args.Contains("--verbose"));
 
 // ---- Composition root: єдине місце, де створюються конкретні класи ----
 bool useFile = args.Contains("--file");
@@ -46,6 +50,14 @@ INotificationSink? sink = useSinks
 
 var service = new CatalogService(store, sink);
 // -----------------------------------------------------------------------
+
+// ---- Лабораторна 7: звіти. Журнал змін збирається підпискою на подію (лаба 6) ----
+if (isReport)
+{
+    var journal = new List<JournalEntry>();
+    service.Changed += (_, e) => journal.Add(new JournalEntry(e.Id, e.Kind, e.Delta));
+    return ReportCommand.Run(command!, service, journal);
+}
 
 if (useFile)
     Console.WriteLine($"Файл даних: {dataPath}");

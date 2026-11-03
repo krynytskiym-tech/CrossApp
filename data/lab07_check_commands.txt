@@ -1,0 +1,193 @@
+ПЕРЕВІРКА ЛАБОРАТОРНОЇ РОБОТИ 7: УСІ КОМАНДИ
+Звіти через LINQ (CrossApp, Core + Cli, net10.0)
+=================================================
+
+Усі команди виконуються в корені проєкту:
+    cd ~/Desktop/KPP/N_1/CrossApp
+
+Коротко про файл: розділи 1-9 перевіряють DoD і додаткові завдання,
+розділ 10 це швидка перевірка попередніх лабораторних (регресія).
+Після кожної команди вказано очікуваний результат.
+
+
+-------------------------------------------------
+1. ПІДГОТОВКА
+-------------------------------------------------
+    git status --short                  # дерево чисте
+    git log --oneline -3                # зверху коміт lab07 (dd5b297)
+    git tag -l                          # є lab07
+    dotnet build                        # Build succeeded, 0 помилок
+    # Далі використовується --no-build, щоб команди не перебудовували проєкт
+
+
+-------------------------------------------------
+2. ЧОТИРИ ОСНОВНІ ЗВІТИ (DoD 1, 5)
+-------------------------------------------------
+    dotnet run --no-build --project src/Cli -- report-top
+    # 5 рядків: SKU-003 (4200), SKU-006 (800), SKU-010 (540), SKU-012 (400), SKU-009 (310)
+
+    dotnet run --no-build --project src/Cli -- report-low
+    # 3 рядки: SKU-017 (5), SKU-018 (6), SKU-016 (8)
+
+    dotnet run --no-build --project src/Cli -- report-groups
+    # 8 груп: шт 5/4376, м 3/1206, кг 2/790, м2 3/680, уп 2/145, лист 1/95, л 1/60, т 1/18
+
+    dotnet run --no-build --project src/Cli -- report-sum
+    # позицій 18, всього 7370, середнє 409.44, макс 4200
+
+
+-------------------------------------------------
+3. ВІДКЛАДЕНЕ ВИКОНАННЯ (DoD 6)
+-------------------------------------------------
+    dotnet run --no-build --project src/Cli -- report-defer
+    # Дефіцитних до змін: 3
+    # Дефіцитних після змін: 4
+    # У знімку лишилось: 4
+    # Той самий запит після Clear: 0
+
+    grep -n "Відкладене виконання" README.md
+    # у README є пояснення, коли виконується запит
+
+
+-------------------------------------------------
+4. СТАБІЛЬНІСТЬ ТОП-N (DoD 3)
+-------------------------------------------------
+    dotnet run --no-build --project src/Cli -- report-top > /tmp/top1.txt
+    dotnet run --no-build --project src/Cli -- report-top > /tmp/top2.txt
+    diff /tmp/top1.txt /tmp/top2.txt && echo "Порядок однаковий"
+    # Порядок однаковий
+
+    grep -n "ThenBy" src/Core/Reports/*.cs
+    # другий ключ є в EnumerableExtensions.cs (TopBy), ReportService.cs (LowStock, ByUnit)
+
+
+-------------------------------------------------
+5. ПОРОЖНЄ ДЖЕРЕЛО БЕЗ ВИНЯТКУ (DoD 4)
+-------------------------------------------------
+    DATA=src/Cli/bin/Debug/net10.0/data/catalog.json
+    [ -f "$DATA" ] && mv "$DATA" /tmp/catalog.bak      # прибрати файл, якщо він є
+
+    dotnet run --no-build --project src/Cli -- report-sum --file
+    # позицій 0, всього 0, середнє 0.00, макс 0   (без винятку)
+
+    dotnet run --no-build --project src/Cli -- report-low --file
+    dotnet run --no-build --project src/Cli -- report-top --file
+    dotnet run --no-build --project src/Cli -- report-groups --file
+    # нічого не виводять, без помилок
+
+    [ -f /tmp/catalog.bak ] && mv /tmp/catalog.bak "$DATA"   # ПОВЕРНУТИ файл назад
+    rm -f /tmp/catalog.bak
+
+
+-------------------------------------------------
+6. ІНШІ ПЕРЕВІРКИ DoD ЗА КОДОМ (DoD 1, 2, 5, 7, 8)
+-------------------------------------------------
+    # DoD 2: сигнатури звітів (IEnumerable на вході, IReadOnlyList<DTO> на виході)
+    grep -n "public static IReadOnlyList" src/Core/Reports/ReportService.cs
+
+    # Самоперевірка 1: у Program.cs немає Where / GroupBy
+    grep -n "Where\|GroupBy" src/Cli/Program.cs || echo "Program.cs чистий"
+
+    # Звіти не знають про Console і файли
+    grep -rn "Console\|File\." src/Core/Reports || echo "Reports чисті"
+
+    # DoD 7: лише LINQ to Objects
+    grep -rn --include="*.cs" "AsParallel\|IQueryable" src || echo "Лише LINQ to Objects"
+
+    # DoD 5: підкоманди в Cli
+    grep -n "case \"report-" src/Cli/ReportCommand.cs
+
+    # DoD 8: SampleData має 18 записів
+    grep -c "Product.Create" src/Core/SampleData.cs
+
+    # Звіти повертають DTO, а не Product
+    grep -n "StockLine\|GroupSummary" src/Core/Reports/ReportService.cs | head
+
+
+-------------------------------------------------
+7. ДОДАТКОВІ ЗАВДАННЯ
+-------------------------------------------------
+    # 1. Join і GroupJoin
+    dotnet run --no-build --project src/Cli -- report-movements
+    # Join: 5 рядків (SKU-001 Issued -20, SKU-002 Received +10 і +5,
+    #        SKU-003 Issued -100, SKU-016 Received +15)
+
+    dotnet run --no-build --project src/Cli -- report-activity
+    # GroupJoin: 4 товари з рухом і "Без руху: 14 позицій"
+
+    # 2. Метод-розширення TopBy у двох звітах
+    dotnet run --no-build --project src/Cli -- report-top-units
+    # 3 рядки: шт 5/4376, м 3/1206, кг 2/790
+    grep -n "TopBy" src/Core/Reports/*.cs
+    # оголошення в EnumerableExtensions.cs, використання в TopByQuantity і TopUnits
+
+    # 3. Синтаксис запитів: результат збігається з report-groups
+    dotnet run --no-build --project src/Cli -- report-groups       > /tmp/g1.txt
+    dotnet run --no-build --project src/Cli -- report-groups-query > /tmp/g2.txt
+    diff /tmp/g1.txt /tmp/g2.txt && echo "Однаковий результат"
+
+    # 4. Stopwatch на 100 000 записів
+    dotnet run --no-build --project src/Cli -- report-bench
+    # Без ToList повільніший за З ToList; "Результати збігаються: True"
+
+
+-------------------------------------------------
+8. ОБРОБКА НЕПРАВИЛЬНОЇ КОМАНДИ
+-------------------------------------------------
+    dotnet run --no-build --project src/Cli -- report-xyz; echo "код виходу: $?"
+    # список доступних підкоманд і код виходу 2
+
+    dotnet run --no-build --project src/Cli -- report-top --file
+    # прапорець --file не сприймається як назва звіту (працює як report-top)
+
+
+-------------------------------------------------
+9. РЕПОЗИТОРІЙ
+-------------------------------------------------
+    git status --short                  # чисто
+    git log --oneline -3
+    git tag -l                          # lab03 ... lab07
+    git remote -v                       # адреса GitHub
+    git ls-remote --tags origin         # теги на GitHub, зокрема lab07
+
+
+-------------------------------------------------
+10. ШВИДКА РЕГРЕСІЯ ПОПЕРЕДНІХ ЛАБОРАТОРНИХ
+-------------------------------------------------
+    # Лаба 3: імпорт CSV
+    dotnet run --no-build --project src/Cli -- data/sample.csv
+    # 10 записів, пропущено 3 (рядки 12, 13, 14), статистика, "Доменна перевірка"
+
+    # Лаба 4: доменна модель
+    dotnet run --no-build --project src/Cli -- --domain
+    # сценарії 1-6 без помилок
+
+    # Лаби 5 і 6: сервіс, сховища, події
+    dotnet run --no-build --project src/Cli
+    # Сховище: InMemoryCatalogStore, потім блок "Сценарій 4: події", Подій отримано: 5 і 6
+
+    dotnet run --no-build --project src/Cli -- --file
+    # Сховище: FileCatalogStore; повторний запуск накопичує записи
+
+    dotnet run --no-build --project src/Cli -- nonexistent.csv; echo "код виходу: $?"
+    # Файл не знайдено ..., код виходу 1
+
+    # Примітка: після розширення SampleData до 18 записів вивід лаб 5 і 6 містить
+    # на 3 записи більше, ніж у їхніх звітах (це очікувано).
+
+
+-------------------------------------------------
+ПІДСУМКОВА ТАБЛИЦЯ ВІДПОВІДНОСТІ
+-------------------------------------------------
+    DoD 1  Розділ 2, 6   report-low / report-groups, ReportService.cs
+    DoD 2  Розділ 6      grep сигнатур
+    DoD 3  Розділ 4      diff двох запусків report-top, grep ThenBy
+    DoD 4  Розділ 5      report-sum --file на порожньому каталозі
+    DoD 5  Розділи 2, 6  4 підкоманди, у Program.cs немає Where
+    DoD 6  Розділ 3      report-defer і README
+    DoD 7  Розділ 6      grep AsParallel / IQueryable
+    DoD 8  Розділи 6, 9  SampleData (18 записів), git log, tag
+    Дод. 1 Розділ 7      report-movements, report-activity
+    Дод. 2 Розділ 7      report-top-units, grep TopBy
+    Дод. 3 Розділ 7      diff report-groups і report-groups-query
+    Дод. 4 Розділ 7      report-bench

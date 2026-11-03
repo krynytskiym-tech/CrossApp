@@ -40,10 +40,10 @@ public sealed class Warehouse
         if (product is null)
             throw new ArgumentNullException(nameof(product), "Товар обов'язковий");
         if (_products.Any(p => p.Sku == product.Sku))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Товар {product.Sku} уже є на складі {Id}");
         if (product.Quantity > FreeSpace)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна додати {product.Sku}: кількість {product.Quantity} перевищує вільне місце {FreeSpace} на складі {Id}");
 
         _products.Add(product);
@@ -54,7 +54,7 @@ public sealed class Warehouse
         Product product = Find(sku);
 
         if (amount > FreeSpace)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна прийняти {amount}: на складі {Id} вільно лише {FreeSpace} із {Capacity}");
 
         product.RegisterArrival(amount);
@@ -69,6 +69,6 @@ public sealed class Warehouse
 
         string key = sku.Trim().ToUpperInvariant();
         return _products.FirstOrDefault(p => p.Sku == key)
-            ?? throw new InvalidOperationException($"Товар {key} не знайдено на складі {Id}");
+            ?? throw new DomainException($"Товар {key} не знайдено на складі {Id}");
     }
 }

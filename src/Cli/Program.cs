@@ -11,6 +11,7 @@ using Core.Storage;
 // dotnet run --project src/Cli -- --file               — файлове сховище
 // dotnet run --project src/Cli -- report-top           — звіти LINQ (лаба 7): report-top | report-low | report-groups | report-sum | ...
 // dotnet run --project src/Cli -- --cache | --factory | --sinks   — додаткові режими лаб 5 і 6
+// dotnet run --project src/Cli -- import-json [--stream] [--progress] [--slow] [--timeout=N] — async-імпорт (лаба 8)
 // dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
 // dotnet run --project src/Cli -- data/sample.csv [--verbose]  — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
@@ -20,7 +21,9 @@ if (args.Contains("--domain"))
 string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
 bool isReport = command is not null && command.StartsWith("report-");
 
-if (command is not null && !isReport)
+bool isAsyncImport = command == "import-json";
+
+if (command is not null && !isReport && !isAsyncImport)
     return ImportCommand.Run(command, args.Contains("--verbose"));
 
 // ---- Composition root: єдине місце, де створюються конкретні класи ----
@@ -50,6 +53,16 @@ INotificationSink? sink = useSinks
 
 var service = new CatalogService(store, sink);
 // -----------------------------------------------------------------------
+
+// ---- Лабораторна 8: асинхронний імпорт (конкретні імпортери створюються тут, у composition root) ----
+if (isAsyncImport)
+{
+    ICatalogImporter importer = new JsonCatalogImporter();
+    if (args.Contains("--slow"))
+        importer = new SlowCatalogImporter(importer, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(300));
+
+    return await AsyncImportCommand.RunAsync(service, importer, args);
+}
 
 // ---- Лабораторна 7: звіти. Журнал змін збирається підпискою на подію (лаба 6) ----
 if (isReport)

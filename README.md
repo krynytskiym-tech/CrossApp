@@ -21,6 +21,7 @@ CrossApp/
     │   ├── Dto/         # формат даних: ProductDto, WarehouseDto, ImportResult<T>, MixedImportResult, ImportStats
     │   ├── Abstractions/ # ICatalogStore — контракт сховища, INotificationSink — приймач сповіщень
     │   ├── Events/      # CatalogChangeKind, CatalogChangedEventArgs — дані події сервісу
+    │   ├── DomainException.cs, StorageException.cs  # доменна і технічна помилки
     │   ├── Reports/     # ReportService (LINQ-звіти), DTO StockLine, GroupSummary, TopBy, Join-звіти
     │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore, CachingCatalogStore
     │   ├── Services/    # CatalogService — бізнес-операції
@@ -32,6 +33,7 @@ CrossApp/
         ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
         ├── EventsDemo.cs    # сценарій подій лабораторної 6
         ├── ReportCommand.cs # підкоманди report-* лабораторної 7
+        ├── AsyncImportCommand.cs # async-імпорт, Ctrl+C, таймаут (лаба 8)
         ├── ChangeFormatter.cs # формат рядка журналу
         ├── Sinks/           # ConsoleSink, FileSink, CompositeSink (додаткове завдання 1 лаби 6)
         ├── StoreFactory.cs  # альтернативний вибір сховища (додаткове 3)
@@ -51,6 +53,7 @@ dotnet run --project src/Cli -- --file              # сервіс + файло�
 dotnet run --project src/Cli -- --cache             # + декоратор CachingCatalogStore
 dotnet run --project src/Cli -- --file --cache --factory   # сховище збирає StoreFactory
 dotnet run --project src/Cli -- report-top          # звіти LINQ (лаба 7), див. розділ нижче
+dotnet run --project src/Cli -- import-json         # async-імпорт data/import.json (лаба 8)
 dotnet run --project src/Cli -- --sinks             # сповіщення через INotificationSink (лаба 6, додаткове)
 dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
 dotnet run --project src/Cli -- data/sample.csv     # імпорт CSV
@@ -296,3 +299,52 @@ Core/Domain не залежить від `Console`, `File` і Cli.
    — ланцюжок методів.
 4. **Stopwatch на 100 000 записів** (`report-bench`): порівнюється запит, що перебирається тричі (`Count`, `Sum`, `Max`),
    з варіантом, де результат один раз матеріалізовано `ToList()`; обидва варіанти мають дати однакові значення.
+
+## Асинхронність, скасування, тести (лабораторна 8)
+
+### Що стало асинхронним
+- `ICatalogImporter.LoadAsync` / `JsonCatalogImporter` — справжній async-ввід-вивід: `FileStream(..., useAsync: true)` і
+  `JsonSerializer.DeserializeAsync`, без `Task.Run`.
+- `CatalogService.ImportAsync(importer, path, ct, progress)` — приймає імпортер параметром (ручний DI), для кожного доданого запису
+  піднімає подію `Added`; імпорт ідемпотентний (існуючі `id` пропускаються).
+- Решта (`Add`, `Receive`, `Issue`, звіти) лишилась синхронною: вони працюють у пам'яті, без введення-виведення.
+
+### Помилки
+| Тип | Коли | Приклад |
+| --- | ---- | ------- |
+| `ArgumentException` / `ArgumentOutOfRangeException` | некоректний аргумент | порожній SKU, від'ємна кількість приходу |
+| `DomainException` | порушення бізнес-правила | видача більша за залишок, запис не знайдено, дубль `id`, запис №N у файлі невалідний |
+| `StorageException` (з `InnerException`) | технічна помилка | пошкоджений JSON |
+| `OperationCanceledException` | очікуване скасування | Ctrl+C, таймаут |
+
+### Імпорт у Cli
+```bash
+dotnet run --project src/Cli -- import-json                       # data/import.json: Імпортовано записів: 17
+dotnet run --project src/Cli -- import-json --file                # те саме у файлове сховище; другий запуск: 0 (ідемпотентність)
+dotnet run --project src/Cli -- import-json data/import_bad.json  # Дані відхилено: Запис 3: ...
+dotnet run --project src/Cli -- import-json data/import_broken.json   # Помилка читання даних: ...
+dotnet run --project src/Cli -- import-json nope.json             # Файл не знайдено: ...
+```
+
+### Як перевірити скасування
+```bash
+dotnet run --project src/Cli -- import-json --slow                    # потім Ctrl+C протягом 5 с: "Імпорт скасовано."
+dotnet run --project src/Cli -- import-json --slow --timeout=2        # таймаут: "Імпорт скасовано." і причина
+dotnet run --project src/Cli -- import-json --slow --stream --progress --timeout=2
+```
+`--slow` додає декоратор `SlowCatalogImporter` (затримки, що реагують на токен), без нього імпорт 17 записів триває мілісекунди.
+Токен: Cli (`Ctrl+C` + `--timeout`, зв'язані через `CreateLinkedTokenSource`) → `ImportAsync` → `LoadAsync` / `StreamAsync`.
+
+### Як запустити тести
+```bash
+bash lab08_setup.sh      # один раз: DomainException у сутностях, проєкт tests/Core.Tests, dotnet test
+dotnet test              # далі
+```
+Проєкт `tests/Core.Tests` посилається лише на `Core`. Тести не читають `data/`; один тест із тимчасовим файлом видаляє його у `finally`.
+Покриття: `dotnet test --collect:"XPlat Code Coverage"`.
+
+### Додаткові завдання лабораторної 8
+1. **`IAsyncEnumerable<Product>`**: `ICatalogImporter.StreamAsync` з `[EnumeratorCancellation]`, `CatalogService.ImportStreamAsync` (`await foreach`), прапорець `--stream`.
+2. **Зв'язані токени**: `CreateLinkedTokenSource(userToken, timeoutToken)` у `AsyncImportCommand`; тест `ImportAsync_WhenTimeoutFires_...` доводить, що спрацював таймаут, а не користувач.
+3. **`IProgress<int>`**: `ImportAsync` звітує відсотками, `ImportStreamAsync` кількістю; `ConsoleProgress` у Cli (`--progress`). Власна синхронна реалізація, бо `Progress<T>` викликає обробник через пул потоків і рядок може з'явитися після підсумку.
+4. **Покриття**: див. команду вище; не покритими лишаються Cli (вивід) і `FileCatalogStore` (дисковий ввід-вивід), що прийнятно для модульних тестів Core.

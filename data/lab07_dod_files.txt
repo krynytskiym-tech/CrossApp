@@ -1,0 +1,122 @@
+DoD ЛАБОРАТОРНОЇ 7: НОМЕР, ФАЙЛИ, ЩО ПОКАЗАТИ
+==============================================
+
+DoD 1. 4-5 LINQ-сценаріїв у Core (Where, Select у DTO, GroupBy, агрегат, топ-N)
+  Файли:
+    src/Core/Reports/ReportService.cs
+    src/Core/Reports/StockLine.cs
+    src/Core/Reports/GroupSummary.cs
+  Показати функції:
+    LowStock        - Where, OrderBy, ThenBy, Select
+    TopByQuantity   - топ-N
+    ByUnit          - GroupBy, Count, Sum
+    Totals          - Count, Sum, Average, Max
+
+DoD 2. Звіти приймають IEnumerable<T>, повертають IReadOnlyList<DTO>
+  Файли:
+    src/Core/Reports/ReportService.cs
+    src/Core/Reports/StockLine.cs
+    src/Core/Reports/GroupSummary.cs
+  Показати: сигнатури LowStock, TopByQuantity, ByUnit
+            (IEnumerable<Product> на вході, IReadOnlyList<StockLine / GroupSummary> на виході)
+
+DoD 3. Топ-N має другий ключ сортування
+  Файли:
+    src/Core/Reports/EnumerableExtensions.cs
+    src/Core/Reports/ReportService.cs
+  Показати функції:
+    TopBy           - OrderByDescending + ThenBy + Take
+    TopByQuantity   - викликає TopBy з другим ключем Sku
+
+DoD 4. Порожнє джерело без винятку
+  Файли:
+    src/Core/Reports/ReportService.cs
+  Показати функцію:
+    Totals          - перевірка list.Count == 0 перед Average і Max
+
+DoD 5. Cli має >= 4 підкоманди і читабельне вирівнювання
+  Файли:
+    src/Cli/ReportCommand.cs
+    src/Cli/Program.cs
+  Показати функції:
+    ReportCommand.Run          - switch: report-top, report-low, report-groups, report-sum
+    ReportCommand.Print        - вирівнювання {Sku,-10} {Name,-22} {Quantity,6}
+    ReportCommand.PrintGroups  - вирівнювання груп
+    Program.cs                 - лише маршрутизація, немає Where і GroupBy
+
+DoD 6. Демо відкладеного виконання, пояснене в README
+  Файли:
+    src/Cli/ReportCommand.cs
+    README.md
+  Показати:
+    ReportCommand.DeferredDemo           - Count() до і після зміни, ToList, Clear
+    README.md, розділ «Відкладене виконання: коли виконується запит»
+
+DoD 7. Лише LINQ to Objects
+  Файли:
+    src/ (весь каталог)
+    src/Core/Core.csproj
+  Показати: команда grep не знаходить AsParallel і IQueryable; у Core.csproj немає пакетів
+
+DoD 8. SampleData 15-20 записів, коміт lab07
+  Файли:
+    src/Core/SampleData.cs
+    README.md
+  Показати:
+    SampleData.Products     - 18 записів, 8 одиниць виміру, 3 позиції з залишком < 10
+    git log --oneline -3    - коміт dd5b297 «lab07: LINQ reports»
+    git tag -l              - тег lab07
+
+
+ДОДАТКОВІ ЗАВДАННЯ
+------------------
+
+Дод. 1. Join і GroupJoin
+  Файли:
+    src/Core/Reports/ReportService.cs
+    src/Core/Reports/MovementReports.cs
+    src/Cli/Program.cs
+    src/Cli/ReportCommand.cs
+  Показати функції:
+    ReportService.Movements      - Join
+    ReportService.Activity       - GroupJoin
+    Program.cs                   - лямбда-підписка service.Changed += ... journal.Add(...)
+    ReportCommand.MovementsDemo, ActivityDemo
+
+Дод. 2. Власний метод-розширення TopBy
+  Файли:
+    src/Core/Reports/EnumerableExtensions.cs
+    src/Core/Reports/ReportService.cs
+  Показати функції:
+    TopBy                        - оголошення (this IEnumerable<T> ...)
+    ReportService.TopByQuantity  - використання 1
+    ReportService.TopUnits       - використання 2
+
+Дод. 3. Синтаксис запитів
+  Файли:
+    src/Core/Reports/ReportService.cs
+    README.md
+  Показати функції:
+    ReportService.ByUnitQuery    - from ... group ... into g ... select
+    ReportService.ByUnit         - той самий звіт методним синтаксисом (для порівняння)
+
+Дод. 4. Stopwatch на 100 000 записів
+  Файли:
+    src/Cli/ReportCommand.cs
+  Показати функції:
+    ReportCommand.Benchmark      - два варіанти: без ToList і з ToList
+    ReportCommand.Generate       - генерація 100 000 товарів, Random(42)
+
+
+КОМАНДИ ДЛЯ ПОКАЗУ ФУНКЦІЙ
+--------------------------
+    dotnet run --project src/Cli -- report-top         # DoD 1, 3
+    dotnet run --project src/Cli -- report-low         # DoD 1
+    dotnet run --project src/Cli -- report-groups      # DoD 1
+    dotnet run --project src/Cli -- report-sum         # DoD 1, 4
+    dotnet run --project src/Cli -- report-defer       # DoD 6
+    dotnet run --project src/Cli -- report-movements   # Дод. 1
+    dotnet run --project src/Cli -- report-activity    # Дод. 1
+    dotnet run --project src/Cli -- report-top-units   # Дод. 2
+    dotnet run --project src/Cli -- report-groups-query  # Дод. 3
+    dotnet run --project src/Cli -- report-bench       # Дод. 4

@@ -50,6 +50,64 @@ public sealed class CatalogService(ICatalogStore store, INotificationSink? sink 
         OnChanged(product, CatalogChangeKind.Removed, -before, 0);
     }
 
+    // Асинхронний імпорт: імпортер приходить параметром (ручний DI), події піднімаються для кожного доданого запису.
+    // progress (додаткове 3): відсотки виконання.
+    public async Task<int> ImportAsync(
+        ICatalogImporter importer, string path, CancellationToken ct = default, IProgress<int>? progress = null)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+        ct.ThrowIfCancellationRequested();
+
+        var items = await importer.LoadAsync(path, ct);
+        var added = 0;
+        var processed = 0;
+
+        foreach (var item in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            processed++;
+
+            if (_store.GetById(item.Id) is null)   // ідемпотентність імпорту
+            {
+                _store.Add(item);
+                OnChanged(item, CatalogChangeKind.Added, item.Quantity);
+                added++;
+            }
+
+            progress?.Report(processed * 100 / items.Count);
+        }
+
+        return added;
+    }
+
+    // Додаткове 1: потоковий імпорт (await foreach). progress звітує кількістю опрацьованих записів.
+    public async Task<int> ImportStreamAsync(
+        ICatalogImporter importer, string path, CancellationToken ct = default, IProgress<int>? progress = null)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+        ct.ThrowIfCancellationRequested();
+
+        var added = 0;
+        var processed = 0;
+
+        await foreach (var item in importer.StreamAsync(path, ct).WithCancellation(ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            processed++;
+
+            if (_store.GetById(item.Id) is null)
+            {
+                _store.Add(item);
+                OnChanged(item, CatalogChangeKind.Added, item.Quantity);
+                added++;
+            }
+
+            progress?.Report(processed);
+        }
+
+        return added;
+    }
+
     public IReadOnlyList<Product> All() => _store.List();
 
     public Product? Find(string id) => _store.GetById(id);
@@ -62,5 +120,5 @@ public sealed class CatalogService(ICatalogStore store, INotificationSink? sink 
     }
 
     private Product Get(string id) =>
-        _store.GetById(id) ?? throw new InvalidOperationException($"Немає запису з id={id}.");
+        _store.GetById(id) ?? throw new DomainException($"Немає запису з id={id}.");
 }

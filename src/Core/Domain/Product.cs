@@ -51,7 +51,7 @@ public sealed class Product
             throw new ArgumentOutOfRangeException(nameof(amount), amount,
                 "Кількість приходу має бути більшою за нуль");
         if (Status != ProductStatus.Active)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна оформити прихід: товар {Sku} має статус {Status}");
 
         _quantity += amount;
@@ -64,10 +64,10 @@ public sealed class Product
             throw new ArgumentOutOfRangeException(nameof(amount), amount,
                 "Кількість видачі має бути більшою за нуль");
         if (Status == ProductStatus.Archived)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна оформити видачу: товар {Sku} має статус {Status}");
         if (amount > _quantity)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна видати {amount}: залишок {Sku} = {_quantity}");
 
         _quantity -= amount;
@@ -93,10 +93,10 @@ public sealed class Product
         };
 
         if (!allowed)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Недопустимий перехід статусу товару {Sku}: {Status} → {target}");
         if (target == ProductStatus.Archived && _quantity > 0)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Не можна архівувати {Sku}: залишок {_quantity} {Unit} не нульовий");
 
         Status = target;

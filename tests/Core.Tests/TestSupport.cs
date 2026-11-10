@@ -58,3 +58,20 @@ internal static class TempFile
         return path;
     }
 }
+
+// Тимчасовий каталог для тестів сховища; тест видаляє його у finally.
+internal static class TempDir
+{
+    public static string Create()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"coretests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    public static void Delete(string path)
+    {
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+    }
+}

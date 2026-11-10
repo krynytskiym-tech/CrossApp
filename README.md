@@ -22,6 +22,7 @@ CrossApp/
     │   ├── Abstractions/ # ICatalogStore — контракт сховища, INotificationSink — приймач сповіщень
     │   ├── Events/      # CatalogChangeKind, CatalogChangedEventArgs — дані події сервісу
     │   ├── DomainException.cs, StorageException.cs  # доменна і технічна помилки
+    │   ├── Configuration/ # AppOptions, StorageOptions (ResolveFullPath)
     │   ├── Reports/     # ReportService (LINQ-звіти), DTO StockLine, GroupSummary, TopBy, Join-звіти
     │   ├── Storage/     # InMemoryCatalogStore, FileCatalogStore, CachingCatalogStore
     │   ├── Services/    # CatalogService — бізнес-операції
@@ -34,6 +35,9 @@ CrossApp/
         ├── EventsDemo.cs    # сценарій подій лабораторної 6
         ├── ReportCommand.cs # підкоманди report-* лабораторної 7
         ├── AsyncImportCommand.cs # async-імпорт, Ctrl+C, таймаут (лаба 8)
+        ├── AppConfiguration.cs # збирання конфігурації (лаба 9)
+        ├── DataCommands.cs # config, export (лаба 9)
+        ├── appsettings.json, appsettings.Development.json, appsettings.Production.json
         ├── ChangeFormatter.cs # формат рядка журналу
         ├── Sinks/           # ConsoleSink, FileSink, CompositeSink (додаткове завдання 1 лаби 6)
         ├── StoreFactory.cs  # альтернативний вибір сховища (додаткове 3)
@@ -53,6 +57,8 @@ dotnet run --project src/Cli -- --file              # сервіс + файло�
 dotnet run --project src/Cli -- --cache             # + декоратор CachingCatalogStore
 dotnet run --project src/Cli -- --file --cache --factory   # сховище збирає StoreFactory
 dotnet run --project src/Cli -- report-top          # звіти LINQ (лаба 7), див. розділ нижче
+dotnet run --project src/Cli -- config              # ефективні налаштування (лаба 9)
+dotnet run --project src/Cli -- export              # експорт колекції в JSON (лаба 9)
 dotnet run --project src/Cli -- import-json         # async-імпорт data/import.json (лаба 8)
 dotnet run --project src/Cli -- --sinks             # сповіщення через INotificationSink (лаба 6, додаткове)
 dotnet run --project src/Cli -- --domain            # демонстрація доменної моделі (лаба 4)
@@ -348,3 +354,81 @@ dotnet test              # далі
 2. **Зв'язані токени**: `CreateLinkedTokenSource(userToken, timeoutToken)` у `AsyncImportCommand`; тест `ImportAsync_WhenTimeoutFires_...` доводить, що спрацював таймаут, а не користувач.
 3. **`IProgress<int>`**: `ImportAsync` звітує відсотками, `ImportStreamAsync` кількістю; `ConsoleProgress` у Cli (`--progress`). Власна синхронна реалізація, бо `Progress<T>` викликає обробник через пул потоків і рядок може з'явитися після підсумку.
 4. **Покриття**: див. команду вище; не покритими лишаються Cli (вивід) і `FileCatalogStore` (дисковий ввід-вивід), що прийнятно для модульних тестів Core.
+
+## Шляхи, JSON, конфігурація, secrets (лабораторна 9)
+
+### Шляхи
+Літералів шляхів у коді немає (`grep -rn 'C:\\\|/home/' src --include=*.cs` порожній). Шляхи будуються через `Path.Combine`, бо роздільник каталогів
+залежить від ОС (`\` у Windows, `/` у Linux і macOS), а конкатенація рядків із `"\"` на Linux дає некоректний шлях.
+Відносний шлях рахується від `AppContext.BaseDirectory` (каталог застосунку), а не від `Environment.CurrentDirectory`
+(залежить від способу запуску). Тому `dotnet run` з кореня solution і з `src/Cli` дає один і той самий файл даних.
+
+### Профілі
+Профіль обирається змінною `CROSSAPP_ENVIRONMENT` (за замовчуванням `Development`).
+
+| Профіль | Файл | Логування | Розташування даних |
+| ------- | ---- | --------- | ------------------ |
+| Development | `appsettings.Development.json` | `MinimumLevel = Debug` | `<каталог застосунку>/data/items.json` |
+| Production | `appsettings.Production.json` | `MinimumLevel = Warning` | `LocalApplicationData/CrossApp/data/items.json` (`Storage:UseUserDataFolder = true`) |
+
+### Таблиця ключів
+| Ключ | Значення за замовчуванням | Призначення | Змінна середовища |
+| ---- | ------------------------- | ----------- | ----------------- |
+| `Storage:DataPath` | `data` | каталог даних (відносний або абсолютний) | `CROSSAPP_Storage__DataPath` або `CROSSAPP_DATA_PATH` |
+| `Storage:FileName` | `items.json` | ім'я файлу даних | `CROSSAPP_Storage__FileName` |
+| `Storage:UseUserDataFolder` | `false` | дані в каталозі користувача | `CROSSAPP_Storage__UseUserDataFolder` |
+| `Logging:MinimumLevel` | `Information` | мінімальний рівень логу | `CROSSAPP_Logging__MinimumLevel` |
+| `Warehouse:DefaultUnit` | `шт` | одиниця виміру за замовчуванням | `CROSSAPP_Warehouse__DefaultUnit` |
+| `EnvironmentName` | `Development` | назва профілю | `CROSSAPP_EnvironmentName` |
+| `Integration:ApiKey` | (немає) | секрет, лише user-secrets або env | `CROSSAPP_Integration__ApiKey` |
+
+### Порядок джерел конфігурації (пізніше перекриває раніше)
+`appsettings.json` → `appsettings.{Environment}.json` → user-secrets → змінні середовища (`CROSSAPP_`) → аргументи (`--Storage:DataPath=tmp`).
+Проста змінна `CROSSAPP_DATA_PATH` перекриває `Storage:DataPath`. У змінних середовища двокрапка замінюється на `__`.
+
+### Приклади змінних
+```powershell
+# PowerShell
+$env:CROSSAPP_DATA_PATH = "$env:TEMP\crossapp-data"
+$env:CROSSAPP_Integration__ApiKey = "from-env"
+$env:CROSSAPP_ENVIRONMENT = "Production"
+dotnet run --project src/Cli -- export
+```
+```bash
+# bash
+CROSSAPP_DATA_PATH=/tmp/crossapp-data dotnet run --project src/Cli -- export
+CROSSAPP_Integration__ApiKey=from-env dotnet run --project src/Cli -- config
+CROSSAPP_ENVIRONMENT=Production dotnet run --project src/Cli -- config
+dotnet run --project src/Cli -- config --Storage:FileName=other.json    # аргумент командного рядка
+```
+
+### Secrets
+У репозиторії є лише `UserSecretsId` у `src/Cli/Cli.csproj`, значення ключа лежить поза репозиторієм:
+
+| ОС | Розташування `secrets.json` |
+| -- | --------------------------- |
+| Linux, macOS | `~/.microsoft/usersecrets/<UserSecretsId>/secrets.json` |
+| Windows | `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json` |
+
+```bash
+dotnet user-secrets init --project src/Cli
+dotnet user-secrets set "Integration:ApiKey" "local-dev-key" --project src/Cli
+dotnet user-secrets list --project src/Cli
+```
+Консоль друкує лише «присутній, довжина N». У `appsettings.json` секретів немає. user-secrets призначені для розробки; у розгорнутому
+застосунку використовують змінні середовища або спеціалізоване сховище секретів.
+
+### Експорт і імпорт колекції в JSON
+```bash
+dotnet run --project src/Cli -- export [шлях]    # уся колекція в JSON (за замовчуванням файл даних із конфігурації)
+dotnet run --project src/Cli -- import [шлях]    # async-імпорт цього файлу (лаба 8)
+```
+Формат: масив `ProductDto` у camelCase (`id`, `sku`, `name`, `unit`, `quantity`), з відступами, кирилиця без `\uXXXX`
+(`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`). Запис атомарний: спочатку `.tmp`, потім `File.Move(..., overwrite: true)`.
+Читання повторно проходить інваріанти (`Product.FromDto`).
+
+### Налаштування і тести
+```bash
+bash lab09_setup.sh     # пакети в Cli, копіювання appsettings, user-secrets, .gitignore, build, test
+```
+Демо-вхідні файли лаб 3 і 8 (`data/sample.csv`, `data/import.json`) вказуються відносно робочого каталогу, запускайте їх з кореня solution.

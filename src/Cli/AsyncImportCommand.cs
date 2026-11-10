@@ -5,15 +5,20 @@ using Core.Services;
 namespace Cli;
 
 // dotnet run --project src/Cli -- import-json [шлях] [--stream] [--progress] [--slow] [--timeout=N]
+// dotnet run --project src/Cli -- import [шлях]   (за замовчуванням файл даних із конфігурації)
 public static class AsyncImportCommand
 {
-    public static async Task<int> RunAsync(CatalogService service, ICatalogImporter importer, string[] args)
+    public static async Task<int> RunAsync(
+        CatalogService service, ICatalogImporter importer, string[] args, string? defaultPath = null)
     {
         string path = args.Where(a => !a.StartsWith("--")).Skip(1).FirstOrDefault()
+                      ?? defaultPath
                       ?? Path.Combine("data", "import.json");
         int? timeoutSeconds = ParseTimeout(args);
         bool stream = args.Contains("--stream");
         IProgress<int>? progress = args.Contains("--progress") ? new ConsoleProgress(percent: !stream) : null;
+
+        Console.WriteLine($"Файл імпорту : {Path.GetFullPath(path)}");
 
         int events = 0;
         service.Changed += (_, _) => events++;

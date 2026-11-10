@@ -1,14 +1,10 @@
-using System.Text.Json;
 using Core.Abstractions;
 using Core.Domain;
-using Core.Dto;
 
 namespace Core.Storage;
 
 public sealed class FileCatalogStore(string path) : ICatalogStore
 {
-    private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
-
     private readonly Dictionary<string, Product> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _path = Path.GetFullPath(path);
     private bool _loaded;
@@ -19,23 +15,15 @@ public sealed class FileCatalogStore(string path) : ICatalogStore
 
         if (File.Exists(_path))
         {
-            var dtos = JsonSerializer.Deserialize<List<ProductDto>>(File.ReadAllText(_path)) ?? [];
-            foreach (var dto in dtos)
-            {
-                var product = Product.FromDto(dto);   // ті самі інваріанти, що й у Create
+            _cache.Clear();
+            foreach (var product in CatalogJson.Read(_path))
                 _cache[product.Id] = product;
-            }
         }
 
         _loaded = true;
     }
 
-    private void Flush()
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        File.WriteAllText(_path,
-            JsonSerializer.Serialize(_cache.Values.Select(p => p.ToDto()).ToList(), Options));
-    }
+    private void Flush() => CatalogJson.Write(_path, _cache.Values);
 
     public IReadOnlyList<Product> List()
     {

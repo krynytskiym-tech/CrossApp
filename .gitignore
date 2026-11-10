@@ -8,3 +8,6 @@
 *.userpublish/
 trim_output.log
 trim_output.log
+**/data/items.json
+*.tmp
+secrets.json

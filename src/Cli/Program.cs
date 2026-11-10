@@ -12,6 +12,7 @@ using Core.Storage;
 // dotnet run --project src/Cli -- report-top           — звіти LINQ (лаба 7): report-top | report-low | report-groups | report-sum | ...
 // dotnet run --project src/Cli -- --cache | --factory | --sinks   — додаткові режими лаб 5 і 6
 // dotnet run --project src/Cli -- import-json [--stream] [--progress] [--slow] [--timeout=N] — async-імпорт (лаба 8)
+// dotnet run --project src/Cli -- config | export [шлях] | import [шлях]  — конфігурація і JSON-колекція (лаба 9)
 // dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
 // dotnet run --project src/Cli -- data/sample.csv [--verbose]  — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
@@ -21,15 +22,31 @@ if (args.Contains("--domain"))
 string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
 bool isReport = command is not null && command.StartsWith("report-");
 
-bool isAsyncImport = command == "import-json";
+bool isAsyncImport = command is "import-json" or "import";
+bool isDataCommand = command is "export" or "config";
 
-if (command is not null && !isReport && !isAsyncImport)
+if (command is not null && !isReport && !isAsyncImport && !isDataCommand)
     return ImportCommand.Run(command, args.Contains("--verbose"));
+
+// ---- Конфігурація (лаба 9): appsettings.json -> профіль -> user-secrets -> змінні середовища -> аргументи ----
+AppSettings settings;
+try
+{
+    settings = AppConfiguration.Load(args);
+}
+catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException)
+{
+    Console.WriteLine($"Помилка конфігурації: {ex.Message}");
+    return 1;
+}
+
+if (command == "config")
+    return DataCommands.ShowConfig(settings);
 
 // ---- Composition root: єдине місце, де створюються конкретні класи ----
 bool useFile = args.Contains("--file");
 bool useSinks = args.Contains("--sinks");
-string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
+string dataPath = settings.DataPath;      // шлях надходить із конфігурації, а не з літерала
 string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
 ICatalogStore store;
@@ -61,8 +78,13 @@ if (isAsyncImport)
     if (args.Contains("--slow"))
         importer = new SlowCatalogImporter(importer, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(300));
 
-    return await AsyncImportCommand.RunAsync(service, importer, args);
+    string? defaultPath = command == "import" ? settings.DataPath : null;
+    return await AsyncImportCommand.RunAsync(service, importer, args, defaultPath);
 }
+
+// ---- Лабораторна 9: експорт усієї колекції у JSON ----
+if (command == "export")
+    return DataCommands.Export(service, settings, args);
 
 // ---- Лабораторна 7: звіти. Журнал змін збирається підпискою на подію (лаба 6) ----
 if (isReport)

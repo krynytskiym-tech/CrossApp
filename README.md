@@ -29,6 +29,7 @@ CrossApp/
     │   ├── SampleData.cs # 15 записів для демо
     │   ├── Domain/      # модель з поведінкою: Product, ProductStatus, Warehouse, Movement, MovementKind, ProductImportExtensions
     │   └── Import/      # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
+    ├── Api/             # Minimal API (лаба 10): Contracts, Endpoints, Validation, Api.http
     └── Cli/             # консольний застосунок
         ├── Cli.csproj   # ProjectReference на Core
         ├── Program.cs   # composition root: єдине місце з конкретними сховищами; маршрутизація режимів
@@ -432,3 +433,64 @@ dotnet run --project src/Cli -- import [шлях]    # async-імпорт цьо
 bash lab09_setup.sh     # пакети в Cli, копіювання appsettings, user-secrets, .gitignore, build, test
 ```
 Демо-вхідні файли лаб 3 і 8 (`data/sample.csv`, `data/import.json`) вказуються відносно робочого каталогу, запускайте їх з кореня solution.
+
+## Minimal API (лабораторна 10)
+
+`src/Api` це друга точка входу поруч із Cli: обидва проєкти використовують той самий `Core`, а Core не залежить від ASP.NET Core.
+Доменна сутність `Product` у JSON не віддається: контракт описують `Api.Contracts.ProductDto` (вихідний) і `SaveProductRequest` (вхідний).
+
+### Запуск
+```bash
+dotnet run --project src/Api --urls http://localhost:5080     # або профіль http із Properties/launchSettings.json
+```
+Порт зафіксовано: **5080**. У Development доступні `GET /openapi/v1.json` (документ OpenAPI) і `http://localhost:5080/scalar/v1` (Scalar UI);
+у Production ці маршрути не реєструються. Перевірка стану: `GET /health`. Файл `src/Api/Api.http` містить готові запити.
+Режим сховища: `Storage:Mode` у `src/Api/appsettings.json` (`Memory` за замовчуванням або `File`).
+
+### Маршрути
+| Метод | Шлях | Тіло | Коди відповідей |
+| ----- | ---- | ---- | --------------- |
+| GET | `/api/products?page=&pageSize=&search=` | — | 200 `{ items, total, page, pageSize }`; 400 (page < 1, pageSize поза 1..100) |
+| GET | `/api/products/low-stock?threshold=5` | — | 200 список; 400 (threshold < 0) |
+| GET | `/api/products/{id}` | — | 200 `ProductDto`; 404 |
+| POST | `/api/products` | `SaveProductRequest` | 201 + `Location`; 400 (валідація, зіпсований JSON, порожнє тіло); 409 (артикул уже існує) |
+| PUT | `/api/products/{id}` | `SaveProductRequest` | 200; 400; 404; 409 |
+| DELETE | `/api/products/{id}` | — | 204; 404 |
+
+Правила валідації (`SaveProductRequestValidator`, FluentValidation): `Sku` обов'язковий; `Name` обов'язкова, до 200 символів; `Unit` обов'язкова, до 20 символів;
+`Quantity` не від'ємна. Помилки повертаються як `ValidationProblem` (400) зі словником `errors`, ключі `Sku`, `Name`, `Unit`, `Quantity`.
+`DomainException` перетворюється на `409 Conflict` (`ApiExceptionHandler`); неочікуваний виняток дає `500` без стека, типів і шляхів
+(деталі лише в журналі сервера).
+
+### Приклади curl
+```bash
+curl -i -X POST http://localhost:5080/api/products -H "Content-Type: application/json" \
+  -d '{"sku":"A-100","name":"Цемент М400","unit":"мішок","quantity":40}'
+# HTTP/1.1 201 Created, Location: /api/products/<id>
+
+curl -i http://localhost:5080/api/products/<id>                    # 200
+curl -i -X PUT http://localhost:5080/api/products/<id> -H "Content-Type: application/json" \
+  -d '{"sku":"A-100","name":"Цемент М500","unit":"мішок","quantity":55}'
+curl -i -X POST http://localhost:5080/api/products -H "Content-Type: application/json" \
+  -d '{"sku":"","name":"X","unit":"","quantity":-1}'                # 400 з errors
+curl -i -X DELETE http://localhost:5080/api/products/<id>           # 204
+curl -i http://localhost:5080/api/products/<id>                     # 404
+```
+
+### Час життя сервісів у DI
+`ICatalogStore` зареєстровано як **Singleton**: інакше кожен запит отримував би нове порожнє сховище, і дані зникали б між запитами. Оскільки Singleton
+обслуговує паралельні запити, `InMemoryCatalogStore` і `FileCatalogStore` захищають доступ через `lock`. Валідатор теж Singleton (не має стану).
+Scoped (один екземпляр на запит) знадобиться на тижні 11 для `DbContext`; Transient (новий екземпляр щоразу) годиться для легких службових об'єктів без стану.
+Контракт `ICatalogStore` лишається синхронним (рішення лаби 9: не створювати другий несумісний контракт); асинхронність живе в імпортері (лаба 8).
+
+### Тести
+```bash
+bash lab10_setup.sh      # Api у solution, tests/Api.Tests (WebApplicationFactory), build, test
+dotnet test
+```
+
+### Додаткові завдання лабораторної 10
+1. **Пагінація і пошук**: `GET /api/products?page=1&pageSize=20&search=...` повертає `{ items, total, page, pageSize }` (єдиний контракт списку).
+2. **FluentValidation** через `AddEndpointFilter<ValidationFilter<SaveProductRequest>>()`: правила в `SaveProductRequestValidator`, обробник їх не перевіряє.
+3. **`DomainException` -> 409 Conflict** окремим `IExceptionHandler` (`ApiExceptionHandler`), приклад: дубль артикула.
+4. **Інтеграційні тести** `tests/Api.Tests` на `WebApplicationFactory<Program>`: POST -> 201, GET за Location -> 200, 400, 404, 409, пагінація, OpenAPI лише в Development.

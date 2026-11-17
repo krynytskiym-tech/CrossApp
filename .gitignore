@@ -11,3 +11,4 @@ trim_output.log
 **/data/items.json
 *.tmp
 secrets.json
+TestResults/

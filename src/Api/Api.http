@@ -1,0 +1,45 @@
+@host = http://localhost:5080
+
+### Health
+GET {{host}}/health
+
+### Список з пагінацією і пошуком
+GET {{host}}/api/products?page=1&pageSize=20&search=
+
+### Створити (201 Created + Location)
+# @name create
+POST {{host}}/api/products
+Content-Type: application/json
+
+{ "sku": "A-100", "name": "Цемент М400", "unit": "мішок", "quantity": 40 }
+
+### Прочитати за id
+@id = {{create.response.body.$.id}}
+GET {{host}}/api/products/{{id}}
+
+### Оновити (PUT замінює ресурс)
+PUT {{host}}/api/products/{{id}}
+Content-Type: application/json
+
+{ "sku": "A-100", "name": "Цемент М500", "unit": "мішок", "quantity": 55 }
+
+### Помилка валідації (400 ValidationProblem)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{ "sku": "", "name": "X", "unit": "", "quantity": -1 }
+
+### Дубль артикула (409 Conflict)
+POST {{host}}/api/products
+Content-Type: application/json
+
+{ "sku": "A-100", "name": "Інший", "unit": "шт", "quantity": 1 }
+
+### Дефіцит
+GET {{host}}/api/products/low-stock?threshold=50
+
+### Видалити (204), потім GET дає 404
+DELETE {{host}}/api/products/{{id}}
+
+###
+GET {{host}}/api/products/{{id}}

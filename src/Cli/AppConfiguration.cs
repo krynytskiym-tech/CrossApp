@@ -6,14 +6,12 @@ namespace Cli;
 
 public sealed record AppSettings(IConfiguration Config, AppOptions Options, StorageOptions Storage, string DataPath);
 
-// Збирання конфігурації: єдине місце, що знає про appsettings.json, user-secrets і змінні середовища.
 public static class AppConfiguration
 {
     public static AppSettings Load(string[] args)
     {
         var envName = Environment.GetEnvironmentVariable("CROSSAPP_ENVIRONMENT") ?? "Development";
 
-        // Порядок джерел: пізніше джерело перекриває раніше.
         var config = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)

@@ -5,10 +5,12 @@ namespace Core.Storage;
 
 public sealed class FileCatalogStore(string path) : ICatalogStore
 {
+    private readonly object _gate = new();
     private readonly Dictionary<string, Product> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _path = Path.GetFullPath(path);
     private bool _loaded;
 
+    // Усі методи нижче виконуються під lock: сховище можна зареєструвати як Singleton в Api.
     private void EnsureLoaded()
     {
         if (_loaded) return;
@@ -27,38 +29,53 @@ public sealed class FileCatalogStore(string path) : ICatalogStore
 
     public IReadOnlyList<Product> List()
     {
-        EnsureLoaded();
-        return _cache.Values.ToList();
+        lock (_gate)
+        {
+            EnsureLoaded();
+            return _cache.Values.ToList();
+        }
     }
 
     public Product? GetById(string id)
     {
-        EnsureLoaded();
-        return _cache.GetValueOrDefault(id);
+        lock (_gate)
+        {
+            EnsureLoaded();
+            return _cache.GetValueOrDefault(id);
+        }
     }
 
     public void Add(Product item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        EnsureLoaded();
-        if (_cache.ContainsKey(item.Id))
-            throw new DomainException($"Запис з id={item.Id} уже існує.");
-        _cache.Add(item.Id, item);
-        Flush();
+        lock (_gate)
+        {
+            EnsureLoaded();
+            if (_cache.ContainsKey(item.Id))
+                throw new DomainException($"Запис з id={item.Id} уже існує.");
+            _cache.Add(item.Id, item);
+            Flush();
+        }
     }
 
     public void Update(Product item)
     {
-        EnsureLoaded();
-        _cache[item.Id] = item;
-        Flush();
+        lock (_gate)
+        {
+            EnsureLoaded();
+            _cache[item.Id] = item;
+            Flush();
+        }
     }
 
     public bool Remove(string id)
     {
-        EnsureLoaded();
-        if (!_cache.Remove(id)) return false;
-        Flush();
-        return true;
+        lock (_gate)
+        {
+            EnsureLoaded();
+            if (!_cache.Remove(id)) return false;
+            Flush();
+            return true;
+        }
     }
 }

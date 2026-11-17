@@ -3,7 +3,7 @@ using Core.Storage;
 
 namespace Cli;
 
-// export [шлях]: зберегти всю колекцію у JSON; config: показати ефективні налаштування.
+// export 
 public static class DataCommands
 {
     public static int Export(CatalogService service, AppSettings settings, string[] args)
@@ -29,7 +29,7 @@ public static class DataCommands
         return 0;
     }
 
-    // Рядок "Файл даних" і факт наявності секрету. Саме значення ключа не друкується.
+    // Рядок "Файл даних" і факт наявності секрету.
     public static void PrintHeader(AppSettings settings, string dataPath)
     {
         Console.WriteLine($"Файл даних : {dataPath}");

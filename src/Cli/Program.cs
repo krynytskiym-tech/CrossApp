@@ -7,18 +7,10 @@ using Core.Reports;
 using Core.Services;
 using Core.Storage;
 
-// dotnet run --project src/Cli                         — сервіс + сховище в пам'яті (лаба 5), потім події (лаба 6)
-// dotnet run --project src/Cli -- --file               — файлове сховище
-// dotnet run --project src/Cli -- report-top           — звіти LINQ (лаба 7): report-top | report-low | report-groups | report-sum | ...
-// dotnet run --project src/Cli -- --cache | --factory | --sinks   — додаткові режими лаб 5 і 6
-// dotnet run --project src/Cli -- import-json [--stream] [--progress] [--slow] [--timeout=N] — async-імпорт (лаба 8)
-// dotnet run --project src/Cli -- config | export [шлях] | import [шлях]  — конфігурація і JSON-колекція (лаба 9)
-// dotnet run --project src/Cli -- --domain             — демонстрація доменної моделі (лаба 4)
-// dotnet run --project src/Cli -- data/sample.csv [--verbose]  — імпорт CSV/JSON/TXT (лаба 3)
 if (args.Contains("--domain"))
     return DomainDemo.Run();
 
-// Перший аргумент без "--": підкоманда звіту або шлях до файлу для імпорту.
+
 string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
 bool isReport = command is not null && command.StartsWith("report-");
 
@@ -28,7 +20,7 @@ bool isDataCommand = command is "export" or "config";
 if (command is not null && !isReport && !isAsyncImport && !isDataCommand)
     return ImportCommand.Run(command, args.Contains("--verbose"));
 
-// ---- Конфігурація (лаба 9): appsettings.json -> профіль -> user-secrets -> змінні середовища -> аргументи ----
+// ---- 
 AppSettings settings;
 try
 {
@@ -43,7 +35,6 @@ catch (Exception ex) when (ex is IOException or InvalidDataException or FormatEx
 if (command == "config")
     return DataCommands.ShowConfig(settings);
 
-// ---- Composition root: єдине місце, де створюються конкретні класи ----
 bool useFile = args.Contains("--file");
 bool useSinks = args.Contains("--sinks");
 string dataPath = settings.DataPath;      // шлях надходить із конфігурації, а не з літерала
@@ -69,9 +60,7 @@ INotificationSink? sink = useSinks
     : null;
 
 var service = new CatalogService(store, sink);
-// -----------------------------------------------------------------------
 
-// ---- Лабораторна 8: асинхронний імпорт (конкретні імпортери створюються тут, у composition root) ----
 if (isAsyncImport)
 {
     ICatalogImporter importer = new JsonCatalogImporter();
@@ -86,7 +75,6 @@ if (isAsyncImport)
 if (command == "export")
     return DataCommands.Export(service, settings, args);
 
-// ---- Лабораторна 7: звіти. Журнал змін збирається підпискою на подію (лаба 6) ----
 if (isReport)
 {
     var journal = new List<JournalEntry>();
